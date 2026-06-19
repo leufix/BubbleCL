@@ -7,6 +7,7 @@ class Main {
   ListenOnCharacterDie = List();
   ListenOnCharacterDamaged = List();
   ListenOnNetworkMessage = List();
+  ListenOnAction = List();
   
   _modes = Dict();
   _currentMode = null;
@@ -22,6 +23,7 @@ class Main {
     standardMap = MapSubset(Map.FindAllMapObjects());
     asoMap = standardMap.CreateCopy(Vector3(10000, 0, 0));
     bombMap = standardMap.CreateCopy(Vector3(0, 0, 10000));
+    hubMap = MapLibrary.CreateHubMap(Vector3(-10000, 0, 0));
     
     if (Network.IsMasterClient) {
       MC_StandardLogic(standardMap).Activate(self);
@@ -29,11 +31,15 @@ class Main {
       MC_AsoLogic(asoMap).Activate(self);
     }
     
-    UILogic().Activate(self);
+    self.UX = UILogic();
+    self.AFK = AfkLogic();
+    self.UX.Activate(self);
+    self.AFK.Activate(self);
     
     self._modes.Set("WAVE", StandardLogic(standardMap));
     self._modes.Set("ASO", AsoLogic(asoMap));
     self._modes.Set("BOMB", BombLogic(bombMap));
+    self._modes.Set("HUB", HubLogic(hubMap));
     
     self.SwitchMode("WAVE");
     self.UpdateMode();
@@ -73,8 +79,11 @@ class Main {
     for (logic in self.ListenOnChatInput) {
       if (logic.OnChatInput(message) == false) { return false; }
     }
-    self.UpdateMode();
     return true;
+  }
+  
+  function OnAction(action) {
+    for (logic in self.ListenOnAction) { logic.OnAction(action); }
   }
   
   function OnTick() {
@@ -83,6 +92,7 @@ class Main {
   
   function OnSecond() {
     for (logic in self.ListenOnSecond) { logic.OnSecond(); }
+    self.UpdateMode();
   }
   
   function OnCharacterSpawn(character) {
@@ -109,18 +119,42 @@ class Main {
 class UILogic {
   _keybinds = Dict();
   
-  function Init() {
-    self._keybinds.Set("Interaction/Function1", "PortalMenu");
-  }
-  
   function Activate(main) {
     main.ListenOnFrame.Add(self);
     main.ListenOnChatInput.Add(self);
+    self.CreateJoinPopup();
+  }
+  
+  function CreateJoinPopup() {
+    text = "";
+    text += "<color=#00ccff>Blub Blub</color>" + String.Newline;
+    text += "   ◦    " + String.Newline;
+    text += "        ◦   " + String.Newline;
+    text += " ◦    " + String.Newline;
+    text += "      ◦   " + String.Newline;
+    text += " ◦    " + String.Newline;
+    text += "      ◦      " + String.Newline;
+    text += "                       <°)))><◦°" + String.Newline;
+    text += String.Newline;
+    text += "- Commands -" + String.Newline;
+    text += "!hub  |  !wave  |  !aso  |  !bomb" + String.Newline;
+		UI.CreatePopup("WelcomeMenu", "Welcome", 500, 600);
+    UI.AddPopupLabel("WelcomeMenu", text);
+    UI.ShowPopup("WelcomeMenu");
   }
   
   function Deactivate(main) {
     main.ListenOnFrame.Remove(self);
     main.ListenOnChatInput.Remove(self);
+  }
+  
+  function AddBind(key, action) {
+    self._keybinds.Set(key, action);
+    self.UpdateBindLabel();
+  }
+  
+  function RemoveBind(key) {
+    self._keybinds.Remove(key);
   }
   
   function OnChatInput(message) {
@@ -135,10 +169,22 @@ class UILogic {
     if (message == "!bomb") {
       return MainController.SwitchMode("BOMB");
     }
+    
+    if (message == "!hub") {
+      return MainController.SwitchMode("HUB");
+    }
+  }
+  
+  function UpdateBindLabel() {
+    label = "<color=#B7E0FF>- Bubble -</color>";
+    for (key in self._keybinds.Keys) {
+      label += String.Newline + self._keybinds.Get(key) + " <color=#ffcc00>[" + Input.GetKeyName(key) + "]</color> ";
+    }
+    UI.SetLabel("BottomRight", label);
   }
   
   function OnKeyDown(action) {
-    Game.Print(action);
+    MainController.TriggerAction(action);
   }
   
   function OnFrame() {
@@ -294,6 +340,7 @@ class MC_BombLogic {
 }
 
 class AsoLogic {
+  _lastRetry = -5;
   _startTime = 0;
   _prevTime = 0;
   
@@ -305,7 +352,10 @@ class AsoLogic {
   function Activate(main) {
     main.ListenOnCharacterSpawn.Add(self);
     main.ListenOnTick.Add(self);
-    main.ListenOnChatInput.Add(self);
+    main.ListenOnAction.Add(self);
+    
+    main.UX.AddBind("Interaction/Function1", "Retry");
+    
     self.Retry();
   }
   
@@ -313,11 +363,11 @@ class AsoLogic {
     main.ListenOnCharacterSpawn.Remove(self);
     main.ListenOnTick.Remove(self);
     main.ListenOnSecond.Remove(self);
-    main.ListenOnChatInput.Remove(self);
+    main.ListenOnAction.Remove(self);
   }
   
-  function OnChatInput(message) {
-    if (message == "!retry") {
+  function OnAction(action) {
+    if (action == "Retry") {
       self.Retry();
     }
   }
@@ -331,8 +381,9 @@ class AsoLogic {
     
     if (self._prevTime != roundTime) {
       if (roundTime == 300 || roundTime == 600) {
-        Game.PrintAll("[ASO] <color=white>" + Network.MyPlayer.Name + "</color> hit " + totalDamage + " in 30s.");
-        if (Network.MyPlayer.Character != null) {
+        kDamage = Math.Round(totalDamage / 1000.0);
+        Game.PrintAll("[ASO] <color=white>" + Network.MyPlayer.Name + "</color> hit " + kDamage + "k in " + roundTime + "s.");
+        if (roundTime == 600 && Network.MyPlayer.Character != null) {
           Network.MyPlayer.Character.GetKilled("");
         }
       } elif (roundTime == 605) {
@@ -352,6 +403,14 @@ class AsoLogic {
   }
   
   function Retry() {
+    timeLeft = 5.0 - (Time.GameTime - self._lastRetry);
+    if (Time.GameTime - self._lastRetry < 5.0) {
+      Game.Print("<color=red>You must wait " + String.FormatFloat(timeLeft, 2) + "s before you can retry.");
+      return;
+    }
+    
+    self._lastRetry = Time.GameTime;
+    
     data = Dict();
     data.Set("op", "ASO_restart");
     Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
@@ -530,6 +589,98 @@ class MC_StandardLogic {
   }
 }
 
+class HubLogic {
+  function Init(map) {
+    self._map = map;
+    self._playerSpawner = PlayerSpawner(map);
+    self._chair = Map.CreateMapObjectRaw("Scene,None,6969,0,1,0,1,0,GlobalChair,0,0,50,0,0,0,1,1,1,Physical,Entities,Default,Default|255/255/255/255,");
+  }
+  
+  function Activate(main) {
+    main.ListenOnAction.Add(self);
+    
+    main.UX.AddBind("Interaction/Function1", "Sit");
+    main.UX.AddBind("Interaction/Function2", "Lay");
+    main.UX.AddBind("Interaction/Function3", "Sleep");
+    main.UX.AddBind("Interaction/Function4", "Stand");
+    
+    UI.SetLabel("TopCenter", "");
+    Network.MyPlayer.SetCustomProperty("ScoreStatus", "[HUB]");
+    self._playerSpawner.Spawn();
+  }
+  
+  function Deactivate(main) {
+    main.ListenOnAction.Remove(self);
+    
+    main.UX.RemoveBind("Interaction/Function1");
+    main.UX.RemoveBind("Interaction/Function2");
+    main.UX.RemoveBind("Interaction/Function3");
+    main.UX.RemoveBind("Interaction/Function4");
+  }
+  
+  function OnAction(action) {
+    me = Network.MyPlayer.Character;
+    if (me == null) {
+      return;
+    }
+    
+    if (me.IsMounted) {
+      me.Unmount();
+      return;
+    }
+    
+    delta = me.Position - self._chair.Position;
+    if (action == "Sit") {
+      me.MountMapObject(self._chair, delta, Vector3(0, me.Rotation.Y, 0));
+      me.PlayAnimation("Armature|horse_idle");
+    }
+    
+    if (action == "Lay") {
+      me.MountMapObject(self._chair, delta + Vector3(0, -0.10, 0), Vector3(0, me.Rotation.Y, 0));
+      me.PlayAnimation("Armature|slide");
+    }
+    
+    if (action == "Sleep") {
+      me.MountMapObject(self._chair, delta + Vector3(0, 0.25, 0), Vector3(-90, me.Rotation.Y, 0));
+      me.PlayAnimation("Armature|idle_TS_M");
+    }
+    
+    if (action == "Stand") {
+      me.Unmount();
+    }
+  }
+  
+  function CanJoin() { return true; }
+}
+
+class AfkLogic {
+  AfkLimit = 30.0;
+  _afkTimer = 30.0;
+  
+  function Activate(main) {
+    main.ListenOnSecond.Add(self);
+  }
+  
+  function Deactivate(main) {
+    main.ListenOnSecond.Remove(self);
+  }
+  
+  function OnSecond() {
+    me = Network.MyPlayer.Character;
+    
+    isHubMode = Network.MyPlayer.GetCustomProperty("CurrentMode") == "HUB";
+    
+    if (me != null && me.Velocity.Magnitude < 0.3 && !isHubMode && !me.IsCarried) {
+      self._afkTimer -= 1.0;
+      if (self._afkTimer < 0.0) {
+        MainController.SwitchMode("HUB"); 
+      }
+    } else {
+      self._afkTimer = self.AfkLimit;
+    }
+  }
+}
+
 class PlayerSpawner {
   ReviveAfter = 5;
   
@@ -642,45 +793,22 @@ extension MainController {
   function SwitchMode(mode) {
     return self._main.SwitchMode(mode);
   }
+  
+  function TriggerAction(action) {
+    self._main.OnAction(action);
+  }
 }
 
-class Leaderboard {
-  _leaderboard = Dict();
-  
-  function Init(name) {
-    self._fileName = "Leaderboard_" + name;
-  }
-  
-  # function GetLeaderboard() {
-  #   index = 0;
-  #   total = 0;
-  #   names = List();
-  #   scores = List();
-
-  #   for (key in self._leaderboard.Keys) {
-  #     value = self._leaderboard.Get(key);
-  #     scores.Add(value * 1000 + index);
-  #     names.Add(key);
-  #     index += 1;
-  #   }
-  #   
-  #   scores.Sort();
-  #   
-  #   text = "";
-  #   index = 1;
-  #   for (i in Range(0, times.Count, 1)) {
-  #     time = Math.Floor(times.Get(i, 0) / 1000.0) / 100.0;
-  #     name = names.Get(Math.Mod(times.Get(i, 0), 1000));
-  #     text += index + ". <color=white>" + name + "</color> - " + time + "s" + String.Newline;
-  #     index += 1;
-  #   }
-
-  #   return text;
-  # }
-  
-  function AddRecord(name, time) {
-    if (self._leaderboard.Contains(name) && time < self._leaderboard.Get(name)) {
-      self._leaderboard.Set(name, time);
+extension MapLibrary {
+  function CreateHubMap(offset) {
+    objects = List();
+    objects.Add(Map.CreateMapObjectRaw("Scene,General/EditorHumanSpawnPoint,5,0,1,1,0,0,Human SpawnPoint,0,0,0,0,0,0,1,1,1,None,Entities,Default,Default|255/255/255/255,Tag|Name:HumanSpawnPoint;"));
+    objects.Add(Map.CreateMapObjectRaw("Scene,Arenas/Arena1,4,0,1,1,1,0,Arena1,0,0,0,0,0,0,1,1,1,Physical,Entities,Default,Default|255/255/255/255,;"));
+    
+    for (obj in objects) {
+      obj.Position = obj.Position + offset;
     }
+    
+    return MapSubset(objects);
   }
 }
