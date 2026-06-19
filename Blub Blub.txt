@@ -1,0 +1,686 @@
+class Main {
+  ListenOnTick = List();
+  ListenOnFrame = List();
+  ListenOnSecond = List();
+  ListenOnChatInput = List();
+  ListenOnCharacterSpawn = List();
+  ListenOnCharacterDie = List();
+  ListenOnCharacterDamaged = List();
+  ListenOnNetworkMessage = List();
+  
+  _modes = Dict();
+  _currentMode = null;
+  _nextMode = null;
+  
+  function Init() {
+    MainController.InitMain(self);
+  }
+  
+  function OnGameStart() {
+    UI.SetScoreboardProperty("ScoreStatus");
+    
+    standardMap = MapSubset(Map.FindAllMapObjects());
+    asoMap = standardMap.CreateCopy(Vector3(10000, 0, 0));
+    bombMap = standardMap.CreateCopy(Vector3(0, 0, 10000));
+    
+    if (Network.IsMasterClient) {
+      MC_StandardLogic(standardMap).Activate(self);
+      MC_BombLogic(bombMap).Activate(self);
+      MC_AsoLogic(asoMap).Activate(self);
+    }
+    
+    UILogic().Activate(self);
+    
+    self._modes.Set("WAVE", StandardLogic(standardMap));
+    self._modes.Set("ASO", AsoLogic(asoMap));
+    self._modes.Set("BOMB", BombLogic(bombMap));
+    
+    self.SwitchMode("WAVE");
+    self.UpdateMode();
+  }
+  
+  function SwitchMode(mode) {
+    if (self._modes.Get(mode).CanJoin()) {
+      self._nextMode = mode;
+      return true;
+    } else {
+      return false;
+    }
+  }
+  
+  function UpdateMode() {
+    if (self._nextMode == null) {
+      return;
+    }
+    
+    currentMode = Network.MyPlayer.GetCustomProperty("CurrentMode");
+    
+    if (currentMode != self._nextMode) {
+      if (self._currentMode != null) {
+        self._currentMode.Deactivate(self);
+      }
+      
+      Network.MyPlayer.SetCustomProperty("CurrentMode", self._nextMode);
+      self._currentMode = self._modes.Get(self._nextMode);
+      self._currentMode.Activate(self);
+      Network.MyPlayer.ClearKDR();
+    }
+    
+    self._nextMode = null;
+  }
+  
+  function OnChatInput(message) {
+    for (logic in self.ListenOnChatInput) {
+      if (logic.OnChatInput(message) == false) { return false; }
+    }
+    self.UpdateMode();
+    return true;
+  }
+  
+  function OnTick() {
+    for (logic in self.ListenOnTick) { logic.OnTick(); }
+  }
+  
+  function OnSecond() {
+    for (logic in self.ListenOnSecond) { logic.OnSecond(); }
+  }
+  
+  function OnCharacterSpawn(character) {
+    for (logic in self.ListenOnCharacterSpawn) { logic.OnCharacterSpawn(character); }
+  }
+  
+  function OnCharacterDie(victim, killer, killerName) {
+    for (logic in self.ListenOnCharacterDie) { logic.OnCharacterDie(victim, killer, killerName); }
+  }
+  
+  function OnCharacterDamaged(victim, killer, killerName, damage) {
+    for (logic in self.ListenOnCharacterDamaged) { logic.OnCharacterDamaged(victim, killer, killerName, damage); }
+  }
+  
+  function OnNetworkMessage(sender, message) {
+    for (logic in self.ListenOnNetworkMessage) { logic.OnNetworkMessage(sender, message); }
+  }
+  
+  function OnFrame() {
+    for (logic in self.ListenOnFrame) { logic.OnFrame(); }
+  }
+}
+
+class UILogic {
+  _keybinds = Dict();
+  
+  function Init() {
+    self._keybinds.Set("Interaction/Function1", "PortalMenu");
+  }
+  
+  function Activate(main) {
+    main.ListenOnFrame.Add(self);
+    main.ListenOnChatInput.Add(self);
+  }
+  
+  function Deactivate(main) {
+    main.ListenOnFrame.Remove(self);
+    main.ListenOnChatInput.Remove(self);
+  }
+  
+  function OnChatInput(message) {
+    if (message == "!wave") {
+      return MainController.SwitchMode("WAVE");
+    }
+    
+    if (message == "!aso") {
+      return MainController.SwitchMode("ASO");
+    }
+    
+    if (message == "!bomb") {
+      return MainController.SwitchMode("BOMB");
+    }
+  }
+  
+  function OnKeyDown(action) {
+    Game.Print(action);
+  }
+  
+  function OnFrame() {
+    for (key in self._keybinds.Keys) {
+      if (Input.GetKeyDown(key)) {
+        self.OnKeyDown(self._keybinds.Get(key));
+      }
+    }
+  }
+}
+
+class BombLogic {
+  function Init(map) {
+    self._map = map;
+    self._playerSpawner = PlayerSpawner(map);
+  }
+  
+  function Activate(main) {
+    main.ListenOnNetworkMessage.Add(self);
+    main.ListenOnCharacterSpawn.Add(self);
+    main.ListenOnTick.Add(self);
+    self._playerSpawner.Spawn();
+    UI.SetLabel("TopCenter", "[Bomb PVP]");
+  }
+  
+  function Deactivate(main) {
+    main.ListenOnNetworkMessage.Remove(self);
+    main.ListenOnCharacterSpawn.Remove(self);
+    main.ListenOnTick.Remove(self);
+  }
+  
+  function OnNetworkMessage(sender, message) {
+    if (sender != Network.MasterClient) {
+      return;
+    }
+    
+    data = Json.LoadFromString(message);
+    if (data.Get("op") == "BOMB_end") {
+      self.OnEnd(data.Get("reason"));
+    } elif (data.Get("op") == "BOMB_start") {
+      self._playerSpawner.Spawn();
+    }
+  }
+  
+  function OnEnd(reason) {
+    if (Network.MyPlayer.Status == "Alive") {
+      self.KillAfter(3);
+    }
+    
+    UI.SetLabelForTime("MiddleCenter", "<size=100>" + String.Newline + "</size>" + reason, 3);
+  }
+  
+  coroutine KillAfter(time) {
+    wait time;
+    me = Network.MyPlayer.Character;
+    if (me != null) {
+      me.GetKilled("");
+      Network.MyPlayer.Deaths -= 1;
+    }
+  }
+  
+  function OnTick() {
+    me = Network.MyPlayer.Character;
+    if (me != null) {
+      me.CurrentGas = me.MaxGas;
+    }
+    
+    UI.SetLabel("TopCenter", Network.MasterClient.GetCustomProperty("BOMB_status"));
+    
+    status = "[BOMB] " + Network.MyPlayer.Kills + "/" + Network.MyPlayer.Deaths;
+    Network.MyPlayer.SetCustomProperty("ScoreStatus", status);
+  }
+  
+  function OnCharacterSpawn(character) {
+    if (character.IsMine && character.Type == "Human") {
+      character.SetWeapon("Thunderspear");
+      character.Team = "None";
+    }
+  }
+  
+  function CanJoin() { return true; }
+}
+
+class MC_BombLogic {
+  _end = false;
+  
+  function Init(map) { }
+  
+  function Activate(main) {
+    main.ListenOnSecond.Add(self);
+  }
+  
+  function Deactivate(main) {
+    main.ListenOnSecond.Remove(self);
+  }
+  
+  function OnSecond() {
+    if (self._end) {
+      return;
+    }
+    
+    winner = null;
+    aliveCount = 0;
+    playerCount = 0;
+    
+    for (p in Network.Players) {
+      if (p.GetCustomProperty("CurrentMode") != "BOMB") {
+        continue;
+      }
+      
+      if (p.Status != "Spectating") {
+        playerCount += 1;
+      }
+      
+      if (p.Status == "Alive") {
+        winner = p;
+        aliveCount += 1;
+      }
+    }
+    
+    if (playerCount < 2) {
+      Network.MyPlayer.SetCustomProperty("BOMB_status", "Waiting for players.");
+      return;
+    }
+    
+    Network.MyPlayer.SetCustomProperty("BOMB_status", "Players remaining: " + aliveCount);
+    
+    if (aliveCount <= 1) {
+      reason = "<b>Nobody</b> won.";
+      if (aliveCount == 1) {
+        reason = "<b>" + winner.Name + "</b> won.";
+      }
+      
+      data = Dict();
+      data.Set("op", "BOMB_end");
+      data.Set("reason", reason);
+      Network.SendMessageAll(Json.SaveToString(data));
+      Network.MyPlayer.SetCustomProperty("BOMB_status", "Round ending.");
+      
+      self._end = true;
+      self.Restart(winner);
+    }
+  }
+  
+  coroutine Restart(winner) {
+    wait 5.0;
+    
+    data = Dict();
+    data.Set("op", "BOMB_start");
+    Network.SendMessageAll(Json.SaveToString(data));
+    self._end = false;
+  }
+}
+
+class AsoLogic {
+  _startTime = 0;
+  _prevTime = 0;
+  
+  function Init(map) {
+    self._map = map;
+    self._playerSpawner = PlayerSpawner(map);
+  }
+  
+  function Activate(main) {
+    main.ListenOnCharacterSpawn.Add(self);
+    main.ListenOnTick.Add(self);
+    main.ListenOnChatInput.Add(self);
+    self.Retry();
+  }
+  
+  function Deactivate(main) {
+    main.ListenOnCharacterSpawn.Remove(self);
+    main.ListenOnTick.Remove(self);
+    main.ListenOnSecond.Remove(self);
+    main.ListenOnChatInput.Remove(self);
+  }
+  
+  function OnChatInput(message) {
+    if (message == "!retry") {
+      self.Retry();
+    }
+  }
+  
+  function OnTick() {
+    wave = Network.MasterClient.GetCustomProperty("ASO_wave");
+    titanCount = Network.MasterClient.GetCustomProperty("ASO_titanCount");
+    totalKills = Network.MyPlayer.Kills;
+    totalDamage = Network.MyPlayer.TotalDamage;
+    roundTime = Math.Round(self.GetTime());
+    
+    if (self._prevTime != roundTime) {
+      if (roundTime == 300 || roundTime == 600) {
+        Game.PrintAll("[ASO] <color=white>" + Network.MyPlayer.Name + "</color> hit " + totalDamage + " in 30s.");
+        if (Network.MyPlayer.Character != null) {
+          Network.MyPlayer.Character.GetKilled("");
+        }
+      } elif (roundTime == 605) {
+        self.Retry();
+      }
+      
+      self._prevTime = roundTime;
+    }
+    
+    displayTime = Math.Floor(self.GetTime() / 15) * 15;
+    status = "[ASO] " + Math.Round(totalDamage / 1000) + "k " + displayTime + "s";
+    Network.MyPlayer.SetCustomProperty("ScoreStatus", status);
+    
+    label = "Titans Left: " + titanCount + "  Wave: " + wave + String.Newline;
+    label += "Time: " + roundTime + "s  Kills: " + totalKills + "  Damage: " + totalDamage;
+    UI.SetLabel("TopCenter", label);
+  }
+  
+  function Retry() {
+    data = Dict();
+    data.Set("op", "ASO_restart");
+    Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
+    self._playerSpawner.Spawn();
+    
+    self._startTime = Time.GameTime;
+    Network.MyPlayer.ClearKDR();
+  }
+  
+  function OnCharacterSpawn(character) {
+    if (character.IsMine && character.Type == "Human") {
+      character.SetWeapon("Blades");
+      character.Team = "Human";
+    }
+  }
+  
+  function GetTime() {
+    return Time.GameTime - self._startTime;
+  }
+  
+  function CanJoin() {
+    for (p in Network.Players) {
+      if (p.GetCustomProperty("CurrentMode") == "ASO") {
+        Game.Print("<color=white>" + p.Name + "</color> is already on ASO.");
+        return false;
+      }
+    }
+    
+    return true;
+  }
+}
+
+class MC_AsoLogic {
+  StartTitans = 3;
+  AddTitansPerWave = 1;
+  
+  _wave = 0;
+  
+  function Init(map) {
+    self._titanSpawner = TitanSpawner(map);
+    self.NextWave();
+  }
+  
+  function Activate(main) {
+    main.ListenOnNetworkMessage.Add(self);
+    main.ListenOnCharacterSpawn.Add(self);
+    main.ListenOnCharacterDie.Add(self);
+  }
+  
+  function Deactivate(main) {
+    main.ListenOnNetworkMessage.Remove(self);
+    main.ListenOnCharacterSpawn.Remove(self);
+    main.ListenOnCharacterDie.Remove(self);
+  }
+  
+  function OnNetworkMessage(sender, message) {
+    data = Json.LoadFromString(message);
+    
+    if (data.Get("op") == "ASO_restart") {
+      self.Restart();
+    }
+  }
+  
+  function OnCharacterSpawn(character) {
+    self.UpdateStatus();
+  }
+  
+  function OnCharacterDie(victim, killer, killerName) {
+    self._titanSpawner.OnCharacterDie(victim, killer, killerName);
+    if (self._titanSpawner.GetCount() == 0) {
+      self.NextWave();
+    }
+    self.UpdateStatus();
+  }
+  
+  function Restart() {
+    self._titanSpawner.Clear();
+    self._wave = 0;
+    self.NextWave();
+  }
+  
+  function UpdateStatus() {
+    Network.MyPlayer.SetCustomProperty("ASO_wave", self._wave);
+    Network.MyPlayer.SetCustomProperty("ASO_titanCount", self._titanSpawner.GetCount());
+  }
+  
+  function NextWave() {
+    self._wave += 1;
+    amount = self.StartTitans + (self._wave - 1) * self.AddTitansPerWave;
+    self._titanSpawner.SpawnTitans(amount);
+  }
+}
+
+class StandardLogic {
+  function Init(map) {
+    self._map = map;
+    self._playerSpawner = PlayerSpawner(map);
+  }
+  
+  function Activate(main) {
+    main.ListenOnTick.Add(self);
+    main.ListenOnSecond.Add(self);
+    main.ListenOnCharacterSpawn.Add(self);
+    self._playerSpawner.Spawn();
+  }
+  
+  function Deactivate(main) {
+    main.ListenOnCharacterSpawn.Remove(self);
+    main.ListenOnTick.Remove(self);
+    main.ListenOnSecond.Remove(self);
+  }
+  
+  function OnSecond() {
+    self._playerSpawner.EndlessRespawn();
+  }
+  
+  function OnTick() {
+    wave = Network.MasterClient.GetCustomProperty("WAVE_wave");
+    titanCount = Network.MasterClient.GetCustomProperty("WAVE_titanCount");
+    UI.SetLabel("TopCenter", "Titans Left: " + titanCount + "  Wave: " + wave);
+    
+    status = "[WAVE] " + Network.MyPlayer.Kills + "/" + Network.MyPlayer.Deaths + "/" + Network.MyPlayer.TotalDamage + "/" + Network.MyPlayer.HighestDamage;
+    Network.MyPlayer.SetCustomProperty("ScoreStatus", status);
+  }
+ 
+  function OnCharacterSpawn(character) {
+    if (character.IsMine && character.Type == "Human") {
+      character.SetWeapon("Blades");
+      character.Team = "Human";
+    }
+  }
+  
+  function CanJoin() { return true; }
+}
+
+class MC_StandardLogic {
+  TitanCount = 10;
+  
+  _wave = 0;
+  
+  function Init(map) {
+    self._titanSpawner = TitanSpawner(map);
+    self.NextWave();
+  }
+  
+  function Activate(main) {
+    main.ListenOnCharacterSpawn.Add(self);
+    main.ListenOnCharacterDie.Add(self);
+  }
+  
+  function Deactivate(main) {
+    main.ListenOnCharacterSpawn.Remove(self);
+    main.ListenOnCharacterDie.Remove(self);
+  }
+  
+  function OnCharacterSpawn(character) {
+    self.UpdateStatus();
+  }
+  
+  function OnCharacterDie(victim, killer, killerName) {
+    self._titanSpawner.OnCharacterDie(victim, killer, killerName);
+    if (self._titanSpawner.GetCount() == 0) {
+      self.NextWave();
+    }
+    self.UpdateStatus();
+  }
+  
+  function UpdateStatus() {
+    Network.MyPlayer.SetCustomProperty("WAVE_wave", self._wave);
+    Network.MyPlayer.SetCustomProperty("WAVE_titanCount", self._titanSpawner.GetCount());
+  }
+  
+  function NextWave() {
+    self._titanSpawner.SpawnTitans(self.TitanCount);
+    self._wave += 1;
+  }
+}
+
+class PlayerSpawner {
+  ReviveAfter = 5;
+  
+  _deadTime = 0;
+  
+  function Init(map) {
+    self._spawns = map.FindMapObjectsByName("Human SpawnPoint");
+  }
+  
+  function EndlessRespawn() {
+    if (Network.MyPlayer.Status == "Dead") {
+      self._deadTime += 1;
+      if (self._deadTime > self.ReviveAfter) {
+        self.Spawn();
+      }
+    }
+  }
+  
+  function Spawn() {
+    randomSpawn = self._spawns.Get(Random.RandomInt(0, self._spawns.Count - 1));
+    if (Network.MyPlayer.Status == "Spectating") {
+      Network.MyPlayer.SpawnPoint = randomSpawn.Position;
+    } else {
+      Game.SpawnPlayerAt(Network.MyPlayer, true, randomSpawn.Position);
+      self._deadTime = 0;
+    }
+  }
+}
+
+class TitanSpawner {
+  function Init(map) {
+    self._spawns = map.FindMapObjectsByName("Titan SpawnPoint");
+    self._titans = Dict();
+  }
+  
+  function OnCharacterDie(victim, killer, killerName) {
+    if (self._titans.Contains(victim.ViewID)) {
+      self._titans.Remove(victim.ViewID);
+    }
+  }
+  
+  function Clear() {
+    titanCache = List();
+    for (titan in self._titans.Values) {
+      titan.Position = new Vector3(0, -10000, 0);
+      titanCache.Add(titan);
+    }
+    self.ClearAsync(titanCache);
+    self._titans.Clear();
+  }
+  
+  coroutine ClearAsync(titanCache) {
+    for (titan in titanCache) {
+      titan.GetKilled("");
+      wait 0.1;
+    }
+  }
+  
+  function GetCount() {
+    return self._titans.Count;
+  }
+  
+  coroutine SpawnTitans(count) {
+    for (i in Range(count)) {
+      randomSpawn = self._spawns.Get(Random.RandomInt(0, self._spawns.Count - 1));
+      t = Game.SpawnTitanAt("Default", randomSpawn.Position);
+      t.Wander();
+      t.DetectRange = 2000;
+      t.FocusRange = 2000;
+      self._titans.Set(t.ViewID, t);
+      wait 0.1;
+    }
+  }
+}
+
+class MapSubset {
+  function Init(mapObjects) {
+    self._mapObjects = mapObjects;
+  }
+  
+  function FindMapObjectsByName(name) {
+    res = List();
+    for (obj in self._mapObjects) {
+      if (obj.Name == name) {
+        res.Add(obj);
+      }
+    }
+    return res;
+  }
+  
+  function CreateCopy(offset) {
+    copyObjects = List();
+    for (obj in self._mapObjects) {
+      if (obj.Name == "Daylight") {
+        continue;
+      }
+      copy = Map.CopyMapObject(obj, true);
+      copy.Position = obj.Position + offset;
+      copyObjects.Add(copy);
+    }
+    return MapSubset(copyObjects);
+  }
+}
+
+extension MainController {
+  function InitMain(main) {
+    self._main = main;
+  }
+  
+  function SwitchMode(mode) {
+    return self._main.SwitchMode(mode);
+  }
+}
+
+class Leaderboard {
+  _leaderboard = Dict();
+  
+  function Init(name) {
+    self._fileName = "Leaderboard_" + name;
+  }
+  
+  # function GetLeaderboard() {
+  #   index = 0;
+  #   total = 0;
+  #   names = List();
+  #   scores = List();
+
+  #   for (key in self._leaderboard.Keys) {
+  #     value = self._leaderboard.Get(key);
+  #     scores.Add(value * 1000 + index);
+  #     names.Add(key);
+  #     index += 1;
+  #   }
+  #   
+  #   scores.Sort();
+  #   
+  #   text = "";
+  #   index = 1;
+  #   for (i in Range(0, times.Count, 1)) {
+  #     time = Math.Floor(times.Get(i, 0) / 1000.0) / 100.0;
+  #     name = names.Get(Math.Mod(times.Get(i, 0), 1000));
+  #     text += index + ". <color=white>" + name + "</color> - " + time + "s" + String.Newline;
+  #     index += 1;
+  #   }
+
+  #   return text;
+  # }
+  
+  function AddRecord(name, time) {
+    if (self._leaderboard.Contains(name) && time < self._leaderboard.Get(name)) {
+      self._leaderboard.Set(name, time);
+    }
+  }
+}
