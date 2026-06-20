@@ -40,7 +40,8 @@ class Main {
     self._modes.Set("ASO", AsoLogic(asoMap));
     self._modes.Set("BOMB", BombLogic(bombMap));
     self._modes.Set("HUB", HubLogic(hubMap));
-    
+
+    NetworkUtil.SetCustomProperty("CurrentMode", "");
     self.SwitchMode("WAVE");
     self.UpdateMode();
   }
@@ -66,7 +67,7 @@ class Main {
         self._currentMode.Deactivate(self);
       }
       
-      Network.MyPlayer.SetCustomProperty("CurrentMode", self._nextMode);
+      NetworkUtil.SetCustomProperty("CurrentMode", self._nextMode);
       self._currentMode = self._modes.Get(self._nextMode);
       self._currentMode.Activate(self);
       Network.MyPlayer.ClearKDR();
@@ -255,7 +256,7 @@ class BombLogic {
     UI.SetLabel("TopCenter", Network.MasterClient.GetCustomProperty("BOMB_status"));
     
     status = "[BOMB] " + Network.MyPlayer.Kills + "/" + Network.MyPlayer.Deaths;
-    Network.MyPlayer.SetCustomProperty("ScoreStatus", status);
+    NetworkUtil.SetCustomProperty("ScoreStatus", status);
   }
   
   function OnCharacterSpawn(character) {
@@ -306,11 +307,11 @@ class MC_BombLogic {
     }
     
     if (playerCount < 2) {
-      Network.MyPlayer.SetCustomProperty("BOMB_status", "Waiting for players.");
+      NetworkUtil.SetCustomProperty("BOMB_status", "Waiting for players.");
       return;
     }
     
-    Network.MyPlayer.SetCustomProperty("BOMB_status", "Players remaining: " + aliveCount);
+    NetworkUtil.SetCustomProperty("BOMB_status", "Players remaining: " + aliveCount);
     
     if (aliveCount <= 1) {
       reason = "<b>Nobody</b> won.";
@@ -322,7 +323,7 @@ class MC_BombLogic {
       data.Set("op", "BOMB_end");
       data.Set("reason", reason);
       Network.SendMessageAll(Json.SaveToString(data));
-      Network.MyPlayer.SetCustomProperty("BOMB_status", "Round ending.");
+      NetworkUtil.SetCustomProperty("BOMB_status", "Round ending.");
       
       self._end = true;
       self.Restart(winner);
@@ -395,7 +396,7 @@ class AsoLogic {
     
     displayTime = Math.Floor(self.GetTime() / 15) * 15;
     status = "[ASO] " + Math.Round(totalDamage / 1000) + "k " + displayTime + "s";
-    Network.MyPlayer.SetCustomProperty("ScoreStatus", status);
+    NetworkUtil.SetCustomProperty("ScoreStatus", status);
     
     label = "Titans Left: " + titanCount + "  Wave: " + wave + String.Newline;
     label += "Time: " + roundTime + "s  Kills: " + totalKills + "  Damage: " + totalDamage;
@@ -456,13 +457,13 @@ class MC_AsoLogic {
   
   function Activate(main) {
     main.ListenOnNetworkMessage.Add(self);
-    main.ListenOnCharacterSpawn.Add(self);
+    main.ListenOnSecond.Add(self);
     main.ListenOnCharacterDie.Add(self);
   }
   
   function Deactivate(main) {
     main.ListenOnNetworkMessage.Remove(self);
-    main.ListenOnCharacterSpawn.Remove(self);
+    main.ListenOnSecond.Remove(self);
     main.ListenOnCharacterDie.Remove(self);
   }
   
@@ -474,16 +475,20 @@ class MC_AsoLogic {
     }
   }
   
-  function OnCharacterSpawn(character) {
+  function OnSecond() {
     self.UpdateStatus();
   }
   
   function OnCharacterDie(victim, killer, killerName) {
     self._titanSpawner.OnCharacterDie(victim, killer, killerName);
-    if (self._titanSpawner.GetCount() == 0) {
+
+    if (killer != null && killer.Type == "Human" && self._titanSpawner.GetCount() == 0) {
       self.NextWave();
     }
-    self.UpdateStatus();
+    
+    if (killer != null) {
+      self.UpdateStatus();
+    }
   }
   
   function Restart() {
@@ -493,8 +498,8 @@ class MC_AsoLogic {
   }
   
   function UpdateStatus() {
-    Network.MyPlayer.SetCustomProperty("ASO_wave", self._wave);
-    Network.MyPlayer.SetCustomProperty("ASO_titanCount", self._titanSpawner.GetCount());
+    NetworkUtil.SetCustomProperty("ASO_wave", self._wave);
+    NetworkUtil.SetCustomProperty("ASO_titanCount", self._titanSpawner.GetCount());
   }
   
   function NextWave() {
@@ -514,11 +519,14 @@ class StandardLogic {
     main.ListenOnTick.Add(self);
     main.ListenOnSecond.Add(self);
     main.ListenOnCharacterSpawn.Add(self);
+    main.ListenOnCharacterDamaged.Add(self);
+    self.UpdateStatus();
     self._playerSpawner.Spawn();
   }
   
   function Deactivate(main) {
     main.ListenOnCharacterSpawn.Remove(self);
+    main.ListenOnCharacterDamaged.Add(self);
     main.ListenOnTick.Remove(self);
     main.ListenOnSecond.Remove(self);
   }
@@ -531,9 +539,17 @@ class StandardLogic {
     wave = Network.MasterClient.GetCustomProperty("WAVE_wave");
     titanCount = Network.MasterClient.GetCustomProperty("WAVE_titanCount");
     UI.SetLabel("TopCenter", "Titans Left: " + titanCount + "  Wave: " + wave);
-    
+  }
+
+  function OnCharacterDamaged(victim, killer, killerName, damage) {
+    if (killer.IsMine && killer.Type == "Human" && victim.Type == "Titan") {
+      self.UpdateStatus();
+    }
+  }
+
+  function UpdateStatus() {
     status = "[WAVE] " + Network.MyPlayer.Kills + "/" + Network.MyPlayer.Deaths + "/" + Network.MyPlayer.TotalDamage + "/" + Network.MyPlayer.HighestDamage;
-    Network.MyPlayer.SetCustomProperty("ScoreStatus", status);
+    NetworkUtil.SetCustomProperty("ScoreStatus", status);
   }
  
   function OnCharacterSpawn(character) {
@@ -557,16 +573,16 @@ class MC_StandardLogic {
   }
   
   function Activate(main) {
-    main.ListenOnCharacterSpawn.Add(self);
+    main.ListenOnSecond.Add(self);
     main.ListenOnCharacterDie.Add(self);
   }
   
   function Deactivate(main) {
-    main.ListenOnCharacterSpawn.Remove(self);
+    main.ListenOnSecond.Remove(self);
     main.ListenOnCharacterDie.Remove(self);
   }
-  
-  function OnCharacterSpawn(character) {
+
+  function OnSecond() {
     self.UpdateStatus();
   }
   
@@ -575,12 +591,15 @@ class MC_StandardLogic {
     if (self._titanSpawner.GetCount() == 0) {
       self.NextWave();
     }
-    self.UpdateStatus();
+    
+    if (killer != null) {
+      self.UpdateStatus();
+    }
   }
   
   function UpdateStatus() {
-    Network.MyPlayer.SetCustomProperty("WAVE_wave", self._wave);
-    Network.MyPlayer.SetCustomProperty("WAVE_titanCount", self._titanSpawner.GetCount());
+    NetworkUtil.SetCustomProperty("WAVE_wave", self._wave);
+    NetworkUtil.SetCustomProperty("WAVE_titanCount", self._titanSpawner.GetCount());
   }
   
   function NextWave() {
@@ -598,6 +617,7 @@ class HubLogic {
   
   function Activate(main) {
     main.ListenOnAction.Add(self);
+    main.ListenOnCharacterSpawn.Add(self);
     
     main.UX.AddBind("Interaction/Function1", "Sit");
     main.UX.AddBind("Interaction/Function2", "Lay");
@@ -605,12 +625,13 @@ class HubLogic {
     main.UX.AddBind("Interaction/Function4", "Stand");
     
     UI.SetLabel("TopCenter", "");
-    Network.MyPlayer.SetCustomProperty("ScoreStatus", "[HUB]");
+    NetworkUtil.SetCustomProperty("ScoreStatus", "[HUB]");
     self._playerSpawner.Spawn();
   }
   
   function Deactivate(main) {
     main.ListenOnAction.Remove(self);
+    main.ListenOnCharacterSpawn.Remove(self);
     
     main.UX.RemoveBind("Interaction/Function1");
     main.UX.RemoveBind("Interaction/Function2");
@@ -618,6 +639,14 @@ class HubLogic {
     main.UX.RemoveBind("Interaction/Function4");
   }
   
+  function OnCharacterSpawn(character) {
+    if (character.IsMine && character.Type == "Human") {
+      character.SetWeapon("Blades");
+      character.CurrentBlade = 0;
+      character.Team = "Human";
+    }
+  }
+
   function OnAction(action) {
     me = Network.MyPlayer.Character;
     if (me == null) {
@@ -735,7 +764,7 @@ class TitanSpawner {
   coroutine ClearAsync(titanCache) {
     for (titan in titanCache) {
       titan.GetKilled("");
-      wait 0.1;
+      wait 0.3;
     }
   }
   
@@ -810,5 +839,18 @@ extension MapLibrary {
     }
     
     return MapSubset(objects);
+  }
+}
+
+extension NetworkUtil {
+  _cache = Dict();
+
+  function SetCustomProperty(key, value) {
+    if (self._cache.Contains(key) && self._cache.Get(key) == value) {
+      return;
+    }
+
+    Network.MyPlayer.SetCustomProperty(key, value);
+    self._cache.Set(key, value);
   }
 }
