@@ -8,6 +8,7 @@ class Main {
   ListenOnCharacterDamaged = List();
   ListenOnNetworkMessage = List();
   ListenOnAction = List();
+  ListenOnButtonClick = List();
   
   _modes = Dict();
   _currentMode = null;
@@ -87,6 +88,10 @@ class Main {
     for (logic in self.ListenOnAction) { logic.OnAction(action); }
   }
   
+  function OnButtonClick(button) {
+    for (logic in self.ListenOnButtonClick) { logic.OnButtonClick(button); }
+  }
+  
   function OnTick() {
     for (logic in self.ListenOnTick) { logic.OnTick(); }
   }
@@ -123,7 +128,19 @@ class UILogic {
   function Activate(main) {
     main.ListenOnFrame.Add(self);
     main.ListenOnChatInput.Add(self);
+    main.ListenOnNetworkMessage.Add(self);
     self.CreateJoinPopup();
+    self.CreateGenericPopup();
+  }
+  
+  function Deactivate(main) {
+    main.ListenOnFrame.Remove(self);
+    main.ListenOnChatInput.Remove(self);
+    main.ListenOnNetworkMessage.Remove(self);
+  }
+  
+  function CreateGenericPopup() {
+    UI.CreatePopup("GenericPopup", "", 800, 600);
   }
   
   function CreateJoinPopup() {
@@ -144,11 +161,6 @@ class UILogic {
     UI.ShowPopup("WelcomeMenu");
   }
   
-  function Deactivate(main) {
-    main.ListenOnFrame.Remove(self);
-    main.ListenOnChatInput.Remove(self);
-  }
-  
   function AddBind(key, action) {
     self._keybinds.Set(key, action);
     self.UpdateBindLabel();
@@ -158,22 +170,22 @@ class UILogic {
     self._keybinds.Remove(key);
   }
   
+  function OnNetworkMessage(sender, message) {
+    dict = Json.LoadFromString(message);
+    
+    if (dict.Get("op") == "UI_popup") {
+      UI.ClearPopup("GenericPopup");
+      UI.AddPopupLabel("GenericPopup", dict.Get("body"));
+      UI.ShowPopup("GenericPopup");
+    }
+  }
+  
   function OnChatInput(message) {
-    if (message == "!wave") {
-      return MainController.SwitchMode("WAVE");
-    }
-    
-    if (message == "!aso") {
-      return MainController.SwitchMode("ASO");
-    }
-    
-    if (message == "!bomb") {
-      return MainController.SwitchMode("BOMB");
-    }
-    
-    if (message == "!hub") {
-      return MainController.SwitchMode("HUB");
-    }
+    if (message == "!wave") { return MainController.SwitchMode("WAVE"); }
+    if (message == "!aso") { return MainController.SwitchMode("ASO"); }
+    if (message == "!bomb") { return MainController.SwitchMode("BOMB"); }
+    if (message == "!hub") { return MainController.SwitchMode("HUB"); }
+    if (message == "!help") { UI.ShowPopup("WelcomeMenu"); }
   }
   
   function UpdateBindLabel() {
@@ -208,7 +220,6 @@ class BombLogic {
     main.ListenOnCharacterSpawn.Add(self);
     main.ListenOnTick.Add(self);
     self._playerSpawner.Spawn();
-    UI.SetLabel("TopCenter", "[Bomb PVP]");
   }
   
   function Deactivate(main) {
@@ -348,14 +359,17 @@ class AsoLogic {
   function Init(map) {
     self._map = map;
     self._playerSpawner = PlayerSpawner(map);
+    self.CreateLeaderboardPopup();
   }
   
   function Activate(main) {
     main.ListenOnCharacterSpawn.Add(self);
     main.ListenOnTick.Add(self);
     main.ListenOnAction.Add(self);
+    main.ListenOnButtonClick.Add(self);
     
     main.UX.AddBind("Interaction/Function1", "Retry");
+    main.UX.AddBind("Interaction/Function2", "Leaderboard");
     
     self.Retry();
   }
@@ -365,11 +379,31 @@ class AsoLogic {
     main.ListenOnTick.Remove(self);
     main.ListenOnSecond.Remove(self);
     main.ListenOnAction.Remove(self);
+    main.ListenOnButtonClick.Remove(self);
+  }
+  
+  function OnButtonClick(button) {
+    if (button == "ASO_leaderboard100s") {
+      self.LeaderboardRequest("100s");
+    } elif (button == "ASO_leaderboard300s") {
+      self.LeaderboardRequest("300s");
+    } elif (button == "ASO_leaderboard600s") {
+      self.LeaderboardRequest("600s");
+    }
+  }
+  
+  function CreateLeaderboardPopup() {
+    UI.CreatePopup("ASOLeaderboardMenu", "ASO Leaderboard", 300, 400);
+    UI.AddPopupButton("ASOLeaderboardMenu", "ASO_leaderboard100s", "100s");
+    UI.AddPopupButton("ASOLeaderboardMenu", "ASO_leaderboard300s", "300s");
+    UI.AddPopupButton("ASOLeaderboardMenu", "ASO_leaderboard600s", "600s");
   }
   
   function OnAction(action) {
     if (action == "Retry") {
       self.Retry();
+    } elif (action == "Leaderboard") {
+      UI.ShowPopup("ASOLeaderboardMenu");
     }
   }
   
@@ -381,22 +415,9 @@ class AsoLogic {
     roundTime = Math.Round(self.GetTime());
     
     if (self._prevTime != roundTime) {
-      if (roundTime == 300 || roundTime == 600) {
-        kDamage = Math.Round(totalDamage / 1000.0);
-        Game.PrintAll("[ASO] <color=white>" + Network.MyPlayer.Name + "</color> hit " + kDamage + "k in " + roundTime + "s.");
-        if (roundTime == 600 && Network.MyPlayer.Character != null) {
-          Network.MyPlayer.Character.GetKilled("");
-        }
-      } elif (roundTime == 605) {
-        self.Retry();
-      }
-      
+      self.OnSecondTransition(roundTime);
       self._prevTime = roundTime;
     }
-    
-    displayTime = Math.Floor(self.GetTime() / 15) * 15;
-    status = "[ASO] " + Math.Round(totalDamage / 1000) + "k " + displayTime + "s";
-    NetworkUtil.SetCustomProperty("ScoreStatus", status);
     
     label = "Titans Left: " + titanCount + "  Wave: " + wave + String.Newline;
     label += "Time: " + roundTime + "s  Kills: " + totalKills + "  Damage: " + totalDamage;
@@ -415,10 +436,43 @@ class AsoLogic {
     data = Dict();
     data.Set("op", "ASO_restart");
     Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
-    self._playerSpawner.Spawn();
     
+    self._playerSpawner.Spawn();
     self._startTime = Time.GameTime;
     Network.MyPlayer.ClearKDR();
+  }
+  
+  function LeaderboardRequest(category) {
+    data = Dict();
+    data.Set("op", "ASO_leaderboard");
+    data.Set("category", category);
+    Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
+  }
+  
+  function OnSecondTransition(roundTime) {
+    if (Math.Mod(roundTime, 15) == 0) {
+      displayTime = Math.Floor(self.GetTime());
+      status = "[ASO] " + Math.Round(Network.MyPlayer.TotalDamage / 1000) + "k in " + displayTime + "s";
+      NetworkUtil.SetCustomProperty("ScoreStatus", status);
+    }
+    
+    if (roundTime == 100 || roundTime == 300 || roundTime == 600) {
+      kDamage = Math.Round(Network.MyPlayer.TotalDamage / 1000.0);
+      Game.PrintAll("[ASO] <color=white>" + Network.MyPlayer.Name + "</color> hit " + kDamage + "k in " + roundTime + "s.");
+      self.SubmitScore(roundTime);
+    } elif (roundTime == 602 && Network.MyPlayer.Character != null) {
+      Network.MyPlayer.Character.GetKilled("");
+    } elif (roundTime == 605) {
+      self.Retry();
+    }
+  }
+  
+  function SubmitScore(roundTime) {
+    data = Dict();
+    data.Set("op", "ASO_submit");
+    data.Set("category", Convert.ToString(roundTime) + "s");
+    data.Set("score", Network.MyPlayer.TotalDamage);
+    Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
   }
   
   function OnCharacterSpawn(character) {
@@ -449,9 +503,11 @@ class MC_AsoLogic {
   AddTitansPerWave = 1;
   
   _wave = 0;
+  _leaderboards = Dict();
   
   function Init(map) {
     self._titanSpawner = TitanSpawner(map);
+    self.InitLeaderboard();
     self.NextWave();
   }
   
@@ -467,11 +523,21 @@ class MC_AsoLogic {
     main.ListenOnCharacterDie.Remove(self);
   }
   
+  function InitLeaderboard() {
+    self._leaderboards.Set("100s", Leaderboard("ASO_100s", false));
+    self._leaderboards.Set("300s", Leaderboard("ASO_300s", false));
+    self._leaderboards.Set("600s", Leaderboard("ASO_600s", false));
+  }
+  
   function OnNetworkMessage(sender, message) {
     data = Json.LoadFromString(message);
     
     if (data.Get("op") == "ASO_restart") {
       self.Restart();
+    } elif (data.Get("op") == "ASO_submit") {
+      self.LeaderboardSubmit(sender.Name, data.Get("category"), data.Get("score"));
+    } elif (data.Get("op") == "ASO_leaderboard") {
+      self.LeaderboardResponse(sender, data.Get("category"));
     }
   }
   
@@ -489,6 +555,38 @@ class MC_AsoLogic {
     if (killer != null) {
       self.UpdateStatus();
     }
+  }
+  
+  function LeaderboardSubmit(name, category, score) {
+    if (self._leaderboards.Contains(category)) {
+      leaderboard = self._leaderboards.Get(category);
+      leaderboard.Submit(name, score);
+    }
+  }
+  
+  function LeaderboardResponse(sender, category) {
+    if (!self._leaderboards.Contains(category)) {
+      return;
+    }
+    
+    leaderboard = self._leaderboards.Get(category);
+    result = leaderboard.Retrieve();
+    
+    text = "<color=#00ccff><size=30>- Leaderboard " + category + " -</size></color>" + String.Newline;
+    
+    index = 1;
+    for (entry in result) {
+      name = entry.Get(0);
+      score = Math.Round(entry.Get(1) / 1000.0);
+      text += index + ". " + name + " - " + score + "k" + String.Newline;
+      index += 1;
+    }
+    
+    data = Dict();
+    data.Set("op", "UI_popup");
+    data.Set("body", text);
+    
+    Network.SendMessage(sender, Json.SaveToString(data));
   }
   
   function Restart() {
@@ -617,6 +715,7 @@ class HubLogic {
   
   function Activate(main) {
     main.ListenOnAction.Add(self);
+    main.ListenOnSecond.Add(self);
     main.ListenOnCharacterSpawn.Add(self);
     
     main.UX.AddBind("Interaction/Function1", "Sit");
@@ -631,6 +730,7 @@ class HubLogic {
   
   function Deactivate(main) {
     main.ListenOnAction.Remove(self);
+    main.ListenOnSecond.Remove(self);
     main.ListenOnCharacterSpawn.Remove(self);
     
     main.UX.RemoveBind("Interaction/Function1");
@@ -643,8 +743,13 @@ class HubLogic {
     if (character.IsMine && character.Type == "Human") {
       character.SetWeapon("Blades");
       character.CurrentBlade = 0;
+      character.CurrentBladeDurability = 0;
       character.Team = "Human";
     }
+  }
+  
+  function OnSecond() {
+    self._playerSpawner.EndlessRespawn();
   }
 
   function OnAction(action) {
@@ -811,6 +916,92 @@ class MapSubset {
       copyObjects.Add(copy);
     }
     return MapSubset(copyObjects);
+  }
+}
+
+class Leaderboard {
+  _scores = Dict();
+  
+  function Init(name, isAscending) {
+    self._isAscending = isAscending;
+    self._fileName = "Leaderboard_" + name;
+    self.Load();
+  }
+  
+  function Submit(name, score) {
+    if (self._scores.Contains(name)) {
+      if (self._isAscending) {
+        if (score < self._scores.Get(name)) { return; }
+      } else {
+        if (score > self._scores.Get(name)) { return; }
+      }
+    }
+    
+    self._scores.Set(name, score);
+    self.Save();
+  }
+  
+  function Load() {
+    if (!PersistentData.FileExists(self._fileName)) {
+      return;
+    }
+    
+    PersistentData.Clear();
+    PersistentData.LoadFromFile(self._fileName, false);
+    data = PersistentData.GetProperty("scores", "");
+    
+    self._scores = Json.LoadFromString(data);
+  }
+  
+  function Save() {
+    PersistentData.Clear();
+    PersistentData.SetProperty("scores", Json.SaveToString(self._scores));
+    PersistentData.SaveToFile(self._fileName, false);
+  }
+  
+  function Retrieve() {
+    result = List();
+    
+    index = 0;
+    total = 0;
+    names = List();
+    scores = List();
+
+    for (key in self._scores.Keys) {
+      value = self._scores.Get(key);
+      scores.Add(Convert.ToInt(value) * 256 + index);
+      names.Add(key);
+      index += 1;
+    }
+
+    scores.Sort();
+    
+    if (self._isAscending) {
+      startIndex = 0;
+      endIndex = scores.Count;
+      step = 1;
+    } else {
+      startIndex = scores.Count - 1;
+      endIndex = -1;
+      step = -1;
+    }
+    
+    result = List();
+    index = 1;
+    
+    for (i in Range(startIndex, endIndex, step)) {
+      score = Math.Floor(scores.Get(i) / 256);
+      name = names.Get(Math.Mod(scores.Get(i), 256));
+      
+      entry = List();
+      entry.Add(name);
+      entry.Add(score);
+      result.Add(entry);
+      
+      index += 1;
+    }
+
+    return result;
   }
 }
 
