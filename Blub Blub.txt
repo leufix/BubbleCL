@@ -182,10 +182,19 @@ class UILogic {
   
   function OnChatInput(message) {
     if (message == "!wave") { return MainController.SwitchMode("WAVE"); }
-    if (message == "!aso") { return MainController.SwitchMode("ASO"); }
-    if (message == "!bomb") { return MainController.SwitchMode("BOMB"); }
-    if (message == "!hub") { return MainController.SwitchMode("HUB"); }
-    if (message == "!help") { UI.ShowPopup("WelcomeMenu"); }
+    elif (message == "!aso") { return MainController.SwitchMode("ASO"); }
+    elif (message == "!bomb") { return MainController.SwitchMode("BOMB"); }
+    elif (message == "!hub") { return MainController.SwitchMode("HUB"); }
+    elif (message == "!help") { UI.ShowPopup("WelcomeMenu"); }
+    elif (message == "piyan") { self.SayAfter("<color=white>piyan bot: piyan</color>"); }
+    elif (String.StartsWith(message, "!roll")) {
+      self.SayAfter("<color=white>" + Network.MyPlayer.Name + "</color> rolled for <color=green>" + Random.RandomInt(0, 101) + "</color>.");
+    }
+  }
+
+  coroutine SayAfter(message) {
+    wait 0.5;
+    Game.PrintAll(message);
   }
   
   function UpdateBindLabel() {
@@ -440,6 +449,9 @@ class AsoLogic {
     self._playerSpawner.Spawn();
     self._startTime = Time.GameTime;
     Network.MyPlayer.ClearKDR();
+    
+    status = "[ASO] 0k in 0s";
+    NetworkUtil.SetCustomProperty("ScoreStatus", status);
   }
   
   function LeaderboardRequest(category) {
@@ -451,7 +463,7 @@ class AsoLogic {
   
   function OnSecondTransition(roundTime) {
     if (Math.Mod(roundTime, 15) == 0) {
-      displayTime = Math.Floor(self.GetTime());
+      displayTime = Math.Ceil(self.GetTime());
       status = "[ASO] " + Math.Round(Network.MyPlayer.TotalDamage / 1000) + "k in " + displayTime + "s";
       NetworkUtil.SetCustomProperty("ScoreStatus", status);
     }
@@ -617,14 +629,14 @@ class StandardLogic {
     main.ListenOnTick.Add(self);
     main.ListenOnSecond.Add(self);
     main.ListenOnCharacterSpawn.Add(self);
-    main.ListenOnCharacterDamaged.Add(self);
+    main.ListenOnCharacterDie.Add(self);
     self.UpdateStatus();
     self._playerSpawner.Spawn();
   }
   
   function Deactivate(main) {
     main.ListenOnCharacterSpawn.Remove(self);
-    main.ListenOnCharacterDamaged.Add(self);
+    main.ListenOnCharacterDie.Remove(self);
     main.ListenOnTick.Remove(self);
     main.ListenOnSecond.Remove(self);
   }
@@ -639,8 +651,8 @@ class StandardLogic {
     UI.SetLabel("TopCenter", "Titans Left: " + titanCount + "  Wave: " + wave);
   }
 
-  function OnCharacterDamaged(victim, killer, killerName, damage) {
-    if (killer.IsMine && killer.Type == "Human" && victim.Type == "Titan") {
+  function OnCharacterDie(victim, killer, killerName) {
+    if (killer != null && killer.IsMine && killer.Type == "Human" && victim.Type == "Titan") {
       self.UpdateStatus();
     }
   }
@@ -931,9 +943,9 @@ class Leaderboard {
   function Submit(name, score) {
     if (self._scores.Contains(name)) {
       if (self._isAscending) {
-        if (score < self._scores.Get(name)) { return; }
-      } else {
         if (score > self._scores.Get(name)) { return; }
+      } else {
+        if (score < self._scores.Get(name)) { return; }
       }
     }
     
