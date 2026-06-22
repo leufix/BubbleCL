@@ -1,1407 +1,1427 @@
 class Main {
-  ListenOnTick = List();
-  ListenOnFrame = List();
-  ListenOnSecond = List();
-  ListenOnChatInput = List();
-  ListenOnCharacterSpawn = List();
-  ListenOnCharacterDie = List();
-  ListenOnCharacterDamaged = List();
-  ListenOnNetworkMessage = List();
-  ListenOnAction = List();
-  ListenOnButtonClick = List();
-  ListenOnLoadMap = List();
-  ListenOnFinishRace = List();
-  
-  _modes = Dict();
-  _currentMode = null;
-  _nextMode = null;
-  
-  function Init() {
-    MainController.InitMain(self);
-  }
-  
-  function OnGameStart() {
-    UI.SetScoreboardProperty("ScoreStatus");
-    
-    standardMap = MapSubset(Map.FindAllMapObjects());
-    asoMap = standardMap.CreateCopy(Vector3(100000, 0, 0));
-    bombMap = standardMap.CreateCopy(Vector3(0, 0, 100000));
-    hubMap = MapLibrary.CreateHubMap(Vector3(-100000, 0, 0));
-    akinaMap = Vector3(0, 0, -100000);
-    
-    if (Network.IsMasterClient) {
-      MC_MapTransferLogic().Activate(self);
-      MC_StandardLogic(standardMap).Activate(self);
-      MC_BombLogic(bombMap).Activate(self);
-      MC_AsoLogic(asoMap).Activate(self);
-      MC_LeaderboardLogic().Activate(self);
-    }
-    
-    self.UX = UILogic();
-    self.AFK = AfkLogic();
-    self.MapLoader = MapLoaderLogic();
-    
-    self.UX.Activate(self);
-    self.AFK.Activate(self);
-    self.MapLoader.Activate(self);
-    LeaderboardLogic().Activate(self);
-    
-    self._modes.Set("WAVE", StandardLogic(standardMap));
-    self._modes.Set("ASO", AsoLogic(asoMap));
-    self._modes.Set("BOMB", BombLogic(bombMap));
-    self._modes.Set("HUB", HubLogic(hubMap));
-    self._modes.Set("AKINA", AkinaLogic(akinaMap));
+	ListenOnTick = List();
+	ListenOnFrame = List();
+	ListenOnSecond = List();
+	ListenOnChatInput = List();
+	ListenOnCharacterSpawn = List();
+	ListenOnCharacterDie = List();
+	ListenOnCharacterDamaged = List();
+	ListenOnNetworkMessage = List();
+	ListenOnAction = List();
+	ListenOnButtonClick = List();
+	ListenOnLoadMap = List();
+	ListenOnFinishRace = List();
 
-    NetworkUtil.SetCustomProperty("CurrentMode", "");
-    self.SwitchMode("WAVE");
-    self.UpdateMode();
-  }
-  
-  function SwitchMode(mode) {
-    if (self._modes.Get(mode).CanJoin()) {
-      self._nextMode = mode;
-      return true;
-    } else {
-      return false;
-    }
-  }
-  
-  function UpdateMode() {
-    if (self._nextMode == null) {
-      return;
-    }
-    
-    currentMode = Network.MyPlayer.GetCustomProperty("CurrentMode");
-    
-    if (currentMode != self._nextMode) {
-      if (self._currentMode != null) {
-        self._currentMode.Deactivate(self);
-      }
-      
-      NetworkUtil.SetCustomProperty("CurrentMode", self._nextMode);
-      self._currentMode = self._modes.Get(self._nextMode);
-      self._currentMode.Activate(self);
-      Network.MyPlayer.ClearKDR();
-    }
-    
-    self._nextMode = null;
-  }
-  
-  function OnChatInput(message) {
-    for (logic in self.ListenOnChatInput) {
-      if (logic.OnChatInput(message) == false) { return false; }
-    }
-    return true;
-  }
-  
-  function FinishRace() {
-    for (logic in self.ListenOnFinishRace) { logic.OnFinishRace(); }
-  }
-  
-  function OnAction(action) {
-    for (logic in self.ListenOnAction) { logic.OnAction(action); }
-  }
-  
-  function OnLoadMap(map) {
-    for (logic in self.ListenOnLoadMap) { logic.OnLoadMap(map); }
-  }
-  
-  function OnButtonClick(button) {
-    for (logic in self.ListenOnButtonClick) { logic.OnButtonClick(button); }
-  }
-  
-  function OnTick() {
-    for (logic in self.ListenOnTick) { logic.OnTick(); }
-  }
-  
-  function OnSecond() {
-    for (logic in self.ListenOnSecond) { logic.OnSecond(); }
-    self.UpdateMode();
-  }
-  
-  function OnCharacterSpawn(character) {
-    for (logic in self.ListenOnCharacterSpawn) { logic.OnCharacterSpawn(character); }
-  }
-  
-  function OnCharacterDie(victim, killer, killerName) {
-    for (logic in self.ListenOnCharacterDie) { logic.OnCharacterDie(victim, killer, killerName); }
-  }
-  
-  function OnCharacterDamaged(victim, killer, killerName, damage) {
-    for (logic in self.ListenOnCharacterDamaged) { logic.OnCharacterDamaged(victim, killer, killerName, damage); }
-  }
-  
-  function OnNetworkMessage(sender, message) {
-    for (logic in self.ListenOnNetworkMessage) { logic.OnNetworkMessage(sender, message); }
-  }
-  
-  function OnFrame() {
-    for (logic in self.ListenOnFrame) { logic.OnFrame(); }
-  }
+	_modes = Dict();
+	_currentMode = null;
+	_nextMode = null;
+
+	function Init() {
+		MainController.InitMain(self);
+	}
+
+	function OnGameStart() {
+		NetworkUtil.SetCustomProperty("bombround", 1);
+		UI.SetScoreboardProperty("ScoreStatus");
+
+		standardMap = MapSubset(Map.FindAllMapObjects());
+		asoMap = standardMap.CreateCopy(Vector3(100000, 0, 0));
+		bombMap = standardMap.CreateCopy(Vector3(0, 0, 100000));
+		hubMap = MapLibrary.CreateHubMap(Vector3(-100000, 0, 0));
+		akinaMap = Vector3(0, 0, -100000);
+
+		if (Network.IsMasterClient) {
+			MC_MapTransferLogic().Activate(self);
+			MC_StandardLogic(standardMap).Activate(self);
+			MC_BombLogic(bombMap).Activate(self);
+			MC_AsoLogic(asoMap).Activate(self);
+			MC_LeaderboardLogic().Activate(self);
+		}
+
+		self.UX = UILogic();
+		self.AFK = AfkLogic();
+		self.MapLoader = MapLoaderLogic();
+
+		self.UX.Activate(self);
+		self.AFK.Activate(self);
+		self.MapLoader.Activate(self);
+		LeaderboardLogic().Activate(self);
+
+		self._modes.Set("WAVE", StandardLogic(standardMap));
+		self._modes.Set("ASO", AsoLogic(asoMap));
+		self._modes.Set("BOMB", BombLogic(bombMap));
+		self._modes.Set("HUB", HubLogic(hubMap));
+		self._modes.Set("AKINA", AkinaLogic(akinaMap));
+
+		NetworkUtil.SetCustomProperty("CurrentMode", "");
+		self.SwitchMode("WAVE");
+		self.UpdateMode();
+	}
+
+	function SwitchMode(mode) {
+		if (self._modes.Get(mode).CanJoin()) {
+			self._nextMode = mode;
+			return true;
+		} else {
+			return false;
+		}
+	}
+
+	function UpdateMode() {
+		if (self._nextMode == null) {
+			return;
+		}
+
+		currentMode = Network.MyPlayer.GetCustomProperty("CurrentMode");
+
+		if (currentMode != self._nextMode) {
+			if (self._currentMode != null) {
+				self._currentMode.Deactivate(self);
+			}
+
+			NetworkUtil.SetCustomProperty("CurrentMode", self._nextMode);
+			self._currentMode = self._modes.Get(self._nextMode);
+			self._currentMode.Activate(self);
+			Network.MyPlayer.ClearKDR();
+		}
+
+		self._nextMode = null;
+	}
+
+	function OnChatInput(message) {
+		for (logic in self.ListenOnChatInput) {
+				if (logic.OnChatInput(message) == false) { return false; }
+		}
+		return true;
+	}
+
+	function FinishRace() {
+			for (logic in self.ListenOnFinishRace) { logic.OnFinishRace(); }
+	}
+
+	function OnAction(action) {
+			for (logic in self.ListenOnAction) { logic.OnAction(action); }
+	}
+
+	function OnLoadMap(map) {
+			for (logic in self.ListenOnLoadMap) { logic.OnLoadMap(map); }
+	}
+
+	function OnButtonClick(button) {
+			for (logic in self.ListenOnButtonClick) { logic.OnButtonClick(button); }
+	}
+
+	function OnTick() {
+			for (logic in self.ListenOnTick) { logic.OnTick(); }
+	}
+
+	function OnSecond() {
+			for (logic in self.ListenOnSecond) { logic.OnSecond(); }
+		self.UpdateMode();
+	}
+
+	function OnCharacterSpawn(character) {
+			for (logic in self.ListenOnCharacterSpawn) { logic.OnCharacterSpawn(character); }
+	}
+
+	function OnCharacterDie(victim, killer, killerName) {
+			for (logic in self.ListenOnCharacterDie) { logic.OnCharacterDie(victim, killer, killerName); }
+	}
+
+	function OnCharacterDamaged(victim, killer, killerName, damage) {
+			for (logic in self.ListenOnCharacterDamaged) { logic.OnCharacterDamaged(victim, killer, killerName, damage); }
+	}
+
+	function OnNetworkMessage(sender, message) {
+			for (logic in self.ListenOnNetworkMessage) { logic.OnNetworkMessage(sender, message); }
+	}
+
+	function OnFrame() {
+			for (logic in self.ListenOnFrame) { logic.OnFrame(); }
+	}
 }
 
 class UILogic {
-  _keybinds = Dict();
-  
-  function Activate(main) {
-    main.ListenOnFrame.Add(self);
-    main.ListenOnChatInput.Add(self);
-    main.ListenOnNetworkMessage.Add(self);
-    self.CreateJoinPopup();
-    self.CreateGenericPopup();
-  }
-  
-  function Deactivate(main) {
-    main.ListenOnFrame.Remove(self);
-    main.ListenOnChatInput.Remove(self);
-    main.ListenOnNetworkMessage.Remove(self);
-  }
-  
-  function CreateGenericPopup() {
-    UI.CreatePopup("GenericPopup", "", 800, 600);
-  }
-  
-  function CreateJoinPopup() {
-    text = "";
-    text += "<color=#00ccff>Blub Blub</color>" + String.Newline;
-    text += "   ◦    " + String.Newline;
-    text += "        ◦   " + String.Newline;
-    text += " ◦    " + String.Newline;
-    text += "      ◦   " + String.Newline;
-    text += " ◦    " + String.Newline;
-    text += "      ◦      " + String.Newline;
-    text += "                       <°)))><◦°" + String.Newline;
-    text += String.Newline;
-    text += "- Commands -" + String.Newline;
-    text += "!hub  |  !wave  |  !aso  |  !bomb  |  !akina" + String.Newline;
-    text += "!leaderboard" + String.Newline;
-		UI.CreatePopup("WelcomeMenu", "Welcome", 500, 600);
-    UI.AddPopupLabel("WelcomeMenu", text);
-    # UI.ShowPopup("WelcomeMenu");
-  }
-  
-  function AddBind(key, action) {
-    self._keybinds.Set(key, action);
-    self.UpdateBindLabel();
-  }
-  
-  function RemoveBind(key) {
-    self._keybinds.Remove(key);
-    self.UpdateBindLabel();
-  }
-  
-  function OnNetworkMessage(sender, message) {
-    dict = Json.LoadFromString(message);
-    
-    if (dict.Get("op") == "UI_popup") {
-      UI.ClearPopup("GenericPopup");
-      UI.AddPopupLabel("GenericPopup", dict.Get("body"));
-      UI.ShowPopup("GenericPopup");
-    }
-  }
-  
-  function OnChatInput(message) {
-    if (message == "!wave") { return MainController.SwitchMode("WAVE"); }
-    elif (message == "!aso") { return MainController.SwitchMode("ASO"); }
-    elif (message == "!bomb") { return MainController.SwitchMode("BOMB"); }
-    elif (message == "!hub") { return MainController.SwitchMode("HUB"); }
-    elif (message == "!akina") { return MainController.SwitchMode("AKINA"); }
-    elif (message == "!leaderboard") { return MainController.TriggerAction("LeaderboardShow"); }
-    elif (message == "!help") { UI.ShowPopup("WelcomeMenu"); }
-    elif (String.StartsWith(message, "!roll")) {
-      self.SayAfter("<color=white>" + Network.MyPlayer.Name + "</color> rolled for <color=green>" + Random.RandomInt(0, 101) + "</color>.");
-    }
-  }
+	_keybinds = Dict();
 
-  coroutine SayAfter(message) {
-    wait 0.5;
-    Game.PrintAll(message);
-  }
-  
-  function UpdateBindLabel() {
-    label = "<color=#B7E0FF>- Bubble -</color>";
-    for (key in self._keybinds.Keys) {
-      label += String.Newline + self._keybinds.Get(key) + " <color=#ffcc00>[" + Input.GetKeyName(key) + "]</color> ";
-    }
-    UI.SetLabel("BottomRight", label);
-  }
-  
-  function OnKeyDown(action) {
-    MainController.TriggerAction(action);
-  }
-  
-  function OnFrame() {
-    for (key in self._keybinds.Keys) {
-      if (Input.GetKeyDown(key)) {
-        self.OnKeyDown(self._keybinds.Get(key));
-      }
-    }
-  }
+	function Activate(main) {
+		main.ListenOnFrame.Add(self);
+		main.ListenOnChatInput.Add(self);
+		main.ListenOnNetworkMessage.Add(self);
+		self.CreateJoinPopup();
+		self.CreateGenericPopup();
+	}
+
+	function Deactivate(main) {
+		main.ListenOnFrame.Remove(self);
+		main.ListenOnChatInput.Remove(self);
+		main.ListenOnNetworkMessage.Remove(self);
+	}
+
+	function CreateGenericPopup() {
+		UI.CreatePopup("GenericPopup", "", 800, 600);
+	}
+
+	function CreateJoinPopup() {
+		text = "";
+		text += "<color=#00ccff>Blub Blub</color>" + String.Newline;
+		text += "   ◦    " + String.Newline;
+		text += "        ◦   " + String.Newline;
+		text += " ◦    " + String.Newline;
+		text += "      ◦   " + String.Newline;
+		text += " ◦    " + String.Newline;
+		text += "      ◦      " + String.Newline;
+		text += "                       <°)))><◦°" + String.Newline;
+		text += String.Newline;
+		text += "- Commands -" + String.Newline;
+		text += "!hub  |  !wave  |  !aso  |  !bomb  |  !akina" + String.Newline;
+		text += "!leaderboard" + String.Newline;
+		UI.CreatePopup("WelcomeMenu", "Welcome", 500, 600);
+		UI.AddPopupLabel("WelcomeMenu", text);
+	# UI.ShowPopup("WelcomeMenu");
+	}
+
+	function AddBind(key, action) {
+		self._keybinds.Set(key, action);
+		self.UpdateBindLabel();
+	}
+
+	function RemoveBind(key) {
+		self._keybinds.Remove(key);
+		self.UpdateBindLabel();
+	}
+
+	function OnNetworkMessage(sender, message) {
+		dict = Json.LoadFromString(message);
+
+		if (dict.Get("op") == "UI_popup") {
+			UI.ClearPopup("GenericPopup");
+			UI.AddPopupLabel("GenericPopup", dict.Get("body"));
+			UI.ShowPopup("GenericPopup");
+		}
+	}
+
+	function OnChatInput(message) {
+			if (message == "!wave") { return MainController.SwitchMode("WAVE"); }
+			elif (message == "!aso") { return MainController.SwitchMode("ASO"); }
+			elif (message == "!bomb") { return MainController.SwitchMode("BOMB"); }
+			elif (message == "!hub") { return MainController.SwitchMode("HUB"); }
+			elif (message == "!akina") { return MainController.SwitchMode("AKINA"); }
+			elif (message == "!leaderboard") { return MainController.TriggerAction("LeaderboardShow"); }
+			elif (message == "!help") { UI.ShowPopup("WelcomeMenu"); }
+		elif (String.StartsWith(message, "!roll")) {
+			self.SayAfter("<color=white>" + Network.MyPlayer.Name + "</color> rolled for <color=green>" + Random.RandomInt(0, 101) + "</color>.");
+		}
+	}
+
+	coroutine SayAfter(message) {
+		wait 0.5;
+		Game.PrintAll(message);
+	}
+
+	function UpdateBindLabel() {
+		label = "<color=#B7E0FF>- Bubble -</color>";
+		for (key in self._keybinds.Keys) {
+			label += String.Newline + self._keybinds.Get(key) + " <color=#ffcc00>[" + Input.GetKeyName(key) + "]</color> ";
+		}
+		UI.SetLabel("BottomRight", label);
+	}
+
+	function OnKeyDown(action) {
+		MainController.TriggerAction(action);
+	}
+
+	function OnFrame() {
+		for (key in self._keybinds.Keys) {
+			if (Input.GetKeyDown(key)) {
+				self.OnKeyDown(self._keybinds.Get(key));
+			}
+		}
+	}
 }
 
 class BombLogic {
-  function Init(map) {
-    self._map = map;
-    self._playerSpawner = PlayerSpawner(map);
-  }
-  
-  function Activate(main) {
-    main.ListenOnNetworkMessage.Add(self);
-    main.ListenOnCharacterSpawn.Add(self);
-    main.ListenOnTick.Add(self);
-    self._playerSpawner.Spawn();
-  }
-  
-  function Deactivate(main) {
-    main.ListenOnNetworkMessage.Remove(self);
-    main.ListenOnCharacterSpawn.Remove(self);
-    main.ListenOnTick.Remove(self);
-  }
-  
-  function OnNetworkMessage(sender, message) {
-    if (sender != Network.MasterClient) {
-      return;
-    }
-    
-    data = Json.LoadFromString(message);
-    if (data.Get("op") == "BOMB_end") {
-      self.OnEnd(data.Get("reason"));
-    } elif (data.Get("op") == "BOMB_start") {
-      self._playerSpawner.Spawn();
-    }
-  }
-  
-  function OnEnd(reason) {
-    if (Network.MyPlayer.Status == "Alive") {
-      self.KillAfter(1);
-    }
-    
-    UI.SetLabelForTime("MiddleCenter", "<size=100>" + String.Newline + "</size>" + reason, 3);
-  }
-  
-  coroutine KillAfter(time) {
-    wait time;
-    me = Network.MyPlayer.Character;
-    if (me != null) {
-      me.GetKilled("");
-      Network.MyPlayer.Deaths -= 1;
-    }
-  }
-  
-  function OnTick() {
-    me = Network.MyPlayer.Character;
-    if (me != null) {
-      me.CurrentGas = me.MaxGas;
-    }
-    
-    UI.SetLabel("TopCenter", Network.MasterClient.GetCustomProperty("BOMB_status"));
-    
-    status = "[BOMB] " + Network.MyPlayer.Kills + "/" + Network.MyPlayer.Deaths;
-    NetworkUtil.SetCustomProperty("ScoreStatus", status);
-  }
-  
-  function OnCharacterSpawn(character) {
-    if (character.IsMine && character.Type == "Human") {
-      character.SetWeapon("Thunderspear");
-      character.Team = "None";
-    }
-  }
-  
-  function CanJoin() { return true; }
+
+	_lastBombRound = 0;
+	function Init(map) {
+		self._map = map;
+		self._playerSpawner = PlayerSpawner(map);
+	}
+
+	function Activate(main) {
+		main.ListenOnNetworkMessage.Add(self);
+		main.ListenOnCharacterSpawn.Add(self);
+		main.ListenOnTick.Add(self);
+		currentBombRound = Network.MasterClient.GetCustomProperty("bombround");
+		if (self._lastBombRound != currentBombRound){
+			self._playerSpawner.Spawn();
+			self._lastBombRound = currentBombRound;
+		}
+		else{
+			me = Network.MyPlayer.Character;
+			if (me != null){
+				me.GetKilled("");
+			}
+		}
+	}
+
+	function Deactivate(main) {
+		currentBombRound = Network.MasterClient.GetCustomProperty("bombround");
+		self._lastBombRound = currentBombRound;
+		main.ListenOnNetworkMessage.Remove(self);
+		main.ListenOnCharacterSpawn.Remove(self);
+		main.ListenOnTick.Remove(self);
+	}
+
+	function OnNetworkMessage(sender, message) {
+		if (sender != Network.MasterClient) {
+			return;
+		}
+
+		data = Json.LoadFromString(message);
+		if (data.Get("op") == "BOMB_end") {
+			self.OnEnd(data.Get("reason"));
+		} elif (data.Get("op") == "BOMB_start") {
+			self._playerSpawner.Spawn();
+		}
+	}
+
+	function OnEnd(reason) {
+		if (Network.MyPlayer.Status == "Alive") {
+			self.KillAfter(1);
+		}
+
+		UI.SetLabelForTime("MiddleCenter", "<size=100>" + String.Newline + "</size>" + reason, 3);
+	}
+
+	coroutine KillAfter(time) {
+		wait time;
+		me = Network.MyPlayer.Character;
+		if (me != null) {
+			me.GetKilled("");
+			Network.MyPlayer.Deaths -= 1;
+		}
+	}
+
+	function OnTick() {
+		me = Network.MyPlayer.Character;
+		if (me != null) {
+			me.CurrentGas = me.MaxGas;
+		}
+
+		UI.SetLabel("TopCenter", Network.MasterClient.GetCustomProperty("BOMB_status"));
+
+		status = "[BOMB] " + Network.MyPlayer.Kills + "/" + Network.MyPlayer.Deaths;
+		NetworkUtil.SetCustomProperty("ScoreStatus", status);
+	}
+
+	function OnCharacterSpawn(character) {
+		if (character.IsMine && character.Type == "Human") {
+			character.SetWeapon("Thunderspear");
+			character.Team = "None";
+		}
+	}
+
+		function CanJoin() { return true; }
 }
 
 class MC_BombLogic {
-  _end = false;
-  
-  function Init(map) { }
-  
-  function Activate(main) {
-    main.ListenOnSecond.Add(self);
-  }
-  
-  function Deactivate(main) {
-    main.ListenOnSecond.Remove(self);
-  }
-  
-  function OnSecond() {
-    if (self._end) {
-      return;
-    }
-    
-    winner = null;
-    aliveCount = 0;
-    playerCount = 0;
-    
-    for (p in Network.Players) {
-      if (p.GetCustomProperty("CurrentMode") != "BOMB") {
-        continue;
-      }
-      
-      if (p.Status != "Spectating") {
-        playerCount += 1;
-      }
-      
-      if (p.Status == "Alive") {
-        winner = p;
-        aliveCount += 1;
-      }
-    }
-    
-    if (playerCount < 2) {
-      NetworkUtil.SetCustomProperty("BOMB_status", "Waiting for players.");
-      return;
-    }
-    
-    NetworkUtil.SetCustomProperty("BOMB_status", "Players remaining: " + aliveCount);
-    
-    if (aliveCount <= 1) {
-      reason = "<b>Nobody</b> won.";
-      if (aliveCount == 1) {
-        reason = "<b>" + winner.Name + "</b> won.";
-      }
-      
-      data = Dict();
-      data.Set("op", "BOMB_end");
-      data.Set("reason", reason);
-      Network.SendMessageAll(Json.SaveToString(data));
-      NetworkUtil.SetCustomProperty("BOMB_status", "Round ending.");
-      
-      self._end = true;
-      self.Restart(winner);
-    }
-  }
-  
-  coroutine Restart(winner) {
-    wait 5.0;
-    
-    data = Dict();
-    data.Set("op", "BOMB_start");
-    Network.SendMessageAll(Json.SaveToString(data));
-    self._end = false;
-  }
+	_end = false;
+	_bombRound = 1;
+
+	function Init(map) { }
+
+	function Activate(main) {
+		main.ListenOnSecond.Add(self);
+	}
+
+	function Deactivate(main) {
+		main.ListenOnSecond.Remove(self);
+	}
+
+	function OnSecond() {
+		if (self._end) {
+			return;
+		}
+
+		winner = null;
+		aliveCount = 0;
+		playerCount = 0;
+
+		for (p in Network.Players) {
+			if (p.GetCustomProperty("CurrentMode") != "BOMB") {
+				continue;
+			}
+
+			if (p.Status != "Spectating") {
+				playerCount += 1;
+			}
+
+			if (p.Status == "Alive") {
+				winner = p;
+				aliveCount += 1;
+			}
+		}
+
+		if (playerCount < 2) {
+			NetworkUtil.SetCustomProperty("BOMB_status", "Waiting for players.");
+			return;
+		}
+
+		NetworkUtil.SetCustomProperty("BOMB_status", "Players remaining: " + aliveCount);
+
+		if (aliveCount <= 1) {
+			reason = "<b>Nobody</b> won.";
+			if (aliveCount == 1) {
+				reason = "<b>" + winner.Name + "</b> won.";
+			}
+
+			data = Dict();
+			data.Set("op", "BOMB_end");
+			data.Set("reason", reason);
+			Network.SendMessageAll(Json.SaveToString(data));
+			NetworkUtil.SetCustomProperty("BOMB_status", "Round ending.");
+
+			self._end = true;
+			self._bombRound += 1;
+			__bombRound = self._bombRound;
+			NetworkUtil.SetCustomProperty("bombround", __bombRound);
+			self.Restart(winner);
+		}
+	}
+
+	coroutine Restart(winner) {
+		wait 5.23;
+
+		data = Dict();
+		data.Set("op", "BOMB_start");
+		Network.SendMessageAll(Json.SaveToString(data));
+		self._end = false;
+		self._bombRound += 1;
+	}
 }
 
 class AsoLogic {
-  _lastRetry = -5;
-  _startTime = 0;
-  _prevTime = 0;
-  
-  function Init(map) {
-    self._map = map;
-    self._playerSpawner = PlayerSpawner(map);
-  }
-  
-  function Activate(main) {
-    main.ListenOnCharacterSpawn.Add(self);
-    main.ListenOnTick.Add(self);
-    main.ListenOnAction.Add(self);
-    
-    main.UX.AddBind("Interaction/Function1", "Retry");
-    
-    self.Retry();
-  }
-  
-  function Deactivate(main) {
-    main.ListenOnCharacterSpawn.Remove(self);
-    main.ListenOnTick.Remove(self);
-    main.ListenOnAction.Remove(self);
-  }
-  
-  function OnAction(action) {
-    if (action == "Retry") {
-      self.Retry();
-    }
-  }
-  
-  function OnTick() {
-    wave = Network.MasterClient.GetCustomProperty("ASO_wave");
-    titanCount = Network.MasterClient.GetCustomProperty("ASO_titanCount");
-    totalKills = Network.MyPlayer.Kills;
-    totalDamage = Network.MyPlayer.TotalDamage;
-    roundTime = Math.Round(self.GetTime());
-    
-    if (self._prevTime != roundTime) {
-      self.OnSecondTransition(roundTime);
-      self._prevTime = roundTime;
-    }
-    
-    label = "Titans Left: " + titanCount + "  Wave: " + wave + String.Newline;
-    label += "Time: " + roundTime + "s  Kills: " + totalKills + "  Damage: " + totalDamage;
-    UI.SetLabel("TopCenter", label);
-  }
-  
-  function Retry() {
-    timeLeft = 5.0 - (Time.GameTime - self._lastRetry);
-    if (Time.GameTime - self._lastRetry < 5.0) {
-      Game.Print("<color=red>You must wait " + String.FormatFloat(timeLeft, 2) + "s before you can retry.");
-      return;
-    }
-    
-    self._lastRetry = Time.GameTime;
-    
-    data = Dict();
-    data.Set("op", "ASO_restart");
-    Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
-    
-    self._playerSpawner.Spawn();
-    self._startTime = Time.GameTime;
-    Network.MyPlayer.ClearKDR();
-    
-    status = "[ASO] 0k in 0s";
-    NetworkUtil.SetCustomProperty("ScoreStatus", status);
-  }
-  
-  function OnSecondTransition(roundTime) {
-    if (Math.Mod(roundTime, 15) == 0) {
-      displayTime = Math.Ceil(self.GetTime());
-      status = "[ASO] " + Math.Round(Network.MyPlayer.TotalDamage / 1000) + "k in " + displayTime + "s";
-      NetworkUtil.SetCustomProperty("ScoreStatus", status);
-    }
-    
-    if (roundTime == 100 || roundTime == 300 || roundTime == 600) {
-      kDamage = Math.Round(Network.MyPlayer.TotalDamage / 1000.0);
-      Game.PrintAll("[ASO] <color=white>" + Network.MyPlayer.Name + "</color> hit " + kDamage + "k in " + roundTime + "s.");
-      self.SubmitScore(roundTime);
-    } elif (roundTime == 602 && Network.MyPlayer.Character != null) {
-      Network.MyPlayer.Character.GetKilled("");
-    } elif (roundTime == 605) {
-      self.Retry();
-    }
-  }
-  
-  function SubmitScore(roundTime) {
-    data = Dict();
-    data.Set("op", "PB_submit");
-    data.Set("category", Convert.ToString(roundTime) + "s");
-    data.Set("score", Network.MyPlayer.TotalDamage);
-    Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
-  }
-  
-  function OnCharacterSpawn(character) {
-    if (character.IsMine && character.Type == "Human") {
-      character.SetWeapon("Blades");
-      character.Team = "Human";
-    }
-  }
-  
-  function GetTime() {
-    return Time.GameTime - self._startTime;
-  }
-  
-  function CanJoin() {
-    for (p in Network.Players) {
-      if (p.GetCustomProperty("CurrentMode") == "ASO") {
-        Game.Print("<color=white>" + p.Name + "</color> is already on ASO.");
-        return false;
-      }
-    }
-    
-    return true;
-  }
+	_lastRetry = -5;
+	_startTime = 0;
+	_prevTime = 0;
+
+	function Init(map) {
+		self._map = map;
+		self._playerSpawner = PlayerSpawner(map);
+	}
+
+	function Activate(main) {
+		main.ListenOnCharacterSpawn.Add(self);
+		main.ListenOnTick.Add(self);
+		main.ListenOnAction.Add(self);
+
+		main.UX.AddBind("Interaction/Function1", "Retry");
+
+		self.Retry();
+	}
+
+	function Deactivate(main) {
+		main.ListenOnCharacterSpawn.Remove(self);
+		main.ListenOnTick.Remove(self);
+		main.ListenOnAction.Remove(self);
+	}
+
+	function OnAction(action) {
+		if (action == "Retry") {
+			self.Retry();
+		}
+	}
+
+	function OnTick() {
+		wave = Network.MasterClient.GetCustomProperty("ASO_wave");
+		titanCount = Network.MasterClient.GetCustomProperty("ASO_titanCount");
+		totalKills = Network.MyPlayer.Kills;
+		totalDamage = Network.MyPlayer.TotalDamage;
+		roundTime = Math.Round(self.GetTime());
+
+		if (self._prevTime != roundTime) {
+			self.OnSecondTransition(roundTime);
+			self._prevTime = roundTime;
+		}
+
+		label = "Titans Left: " + titanCount + "  Wave: " + wave + String.Newline;
+		label += "Time: " + roundTime + "s  Kills: " + totalKills + "  Damage: " + totalDamage;
+		UI.SetLabel("TopCenter", label);
+	}
+
+	function Retry() {
+		timeLeft = 5.0 - (Time.GameTime - self._lastRetry);
+		if (Time.GameTime - self._lastRetry < 5.0) {
+			Game.Print("<color=red>You must wait " + String.FormatFloat(timeLeft, 2) + "s before you can retry.");
+			return;
+		}
+
+		self._lastRetry = Time.GameTime;
+
+		data = Dict();
+		data.Set("op", "ASO_restart");
+		Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
+
+		self._playerSpawner.Spawn();
+		self._startTime = Time.GameTime;
+		Network.MyPlayer.ClearKDR();
+
+		status = "[ASO] 0k in 0s";
+		NetworkUtil.SetCustomProperty("ScoreStatus", status);
+	}
+
+	function OnSecondTransition(roundTime) {
+		if (Math.Mod(roundTime, 15) == 0) {
+			displayTime = Math.Ceil(self.GetTime());
+			status = "[ASO] " + Math.Round(Network.MyPlayer.TotalDamage / 1000) + "k in " + displayTime + "s";
+			NetworkUtil.SetCustomProperty("ScoreStatus", status);
+		}
+
+		if (roundTime == 100 || roundTime == 300 || roundTime == 600) {
+			kDamage = Math.Round(Network.MyPlayer.TotalDamage / 1000.0);
+			Game.PrintAll("[ASO] <color=white>" + Network.MyPlayer.Name + "</color> hit " + kDamage + "k in " + roundTime + "s.");
+			self.SubmitScore(roundTime);
+		} elif (roundTime == 602 && Network.MyPlayer.Character != null) {
+			Network.MyPlayer.Character.GetKilled("");
+		} elif (roundTime == 605) {
+			self.Retry();
+		}
+	}
+
+	function SubmitScore(roundTime) {
+		data = Dict();
+		data.Set("op", "PB_submit");
+		data.Set("category", Convert.ToString(roundTime) + "s");
+		data.Set("score", Network.MyPlayer.TotalDamage);
+		Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
+	}
+
+	function OnCharacterSpawn(character) {
+		if (character.IsMine && character.Type == "Human") {
+			character.SetWeapon("Blades");
+			character.Team = "Human";
+		}
+	}
+
+	function GetTime() {
+		return Time.GameTime - self._startTime;
+	}
+
+	function CanJoin() {
+		for (p in Network.Players) {
+			if (p.GetCustomProperty("CurrentMode") == "ASO") {
+				Game.Print("<color=white>" + p.Name + "</color> is already on ASO.");
+				return false;
+			}
+		}
+
+		return true;
+	}
 }
 
 class MC_AsoLogic {
-  StartTitans = 3;
-  AddTitansPerWave = 1;
-  
-  _wave = 0;
-  
-  function Init(map) {
-    self._titanSpawner = TitanSpawner(map);
-    self.NextWave();
-  }
-  
-  function Activate(main) {
-    main.ListenOnNetworkMessage.Add(self);
-    main.ListenOnSecond.Add(self);
-    main.ListenOnCharacterDie.Add(self);
-  }
-  
-  function Deactivate(main) {
-    main.ListenOnNetworkMessage.Remove(self);
-    main.ListenOnSecond.Remove(self);
-    main.ListenOnCharacterDie.Remove(self);
-  }
-  
-  function OnNetworkMessage(sender, message) {
-    data = Json.LoadFromString(message);
-    
-    if (data.Get("op") == "ASO_restart") {
-      self.Restart();
-    }
-  }
-  
-  function OnSecond() {
-    self.UpdateStatus();
-  }
-  
-  function OnCharacterDie(victim, killer, killerName) {
-    self._titanSpawner.OnCharacterDie(victim, killer, killerName);
+	StartTitans = 3;
+	AddTitansPerWave = 1;
 
-    if (killer != null && killer.Type == "Human" && self._titanSpawner.GetCount() == 0) {
-      self.NextWave();
-    }
-    
-    if (killer != null) {
-      self.UpdateStatus();
-    }
-  }
-  
-  function Restart() {
-    self._titanSpawner.Clear();
-    self._wave = 0;
-    self.NextWave();
-  }
-  
-  function UpdateStatus() {
-    NetworkUtil.SetCustomProperty("ASO_wave", self._wave);
-    NetworkUtil.SetCustomProperty("ASO_titanCount", self._titanSpawner.GetCount());
-  }
-  
-  function NextWave() {
-    self._wave += 1;
-    amount = self.StartTitans + (self._wave - 1) * self.AddTitansPerWave;
-    self._titanSpawner.SpawnTitans(amount);
-  }
+	_wave = 0;
+
+	function Init(map) {
+		self._titanSpawner = TitanSpawner(map);
+		self.NextWave();
+	}
+
+	function Activate(main) {
+		main.ListenOnNetworkMessage.Add(self);
+		main.ListenOnSecond.Add(self);
+		main.ListenOnCharacterDie.Add(self);
+	}
+
+	function Deactivate(main) {
+		main.ListenOnNetworkMessage.Remove(self);
+		main.ListenOnSecond.Remove(self);
+		main.ListenOnCharacterDie.Remove(self);
+	}
+
+	function OnNetworkMessage(sender, message) {
+		data = Json.LoadFromString(message);
+
+		if (data.Get("op") == "ASO_restart") {
+			self.Restart();
+		}
+	}
+
+	function OnSecond() {
+		self.UpdateStatus();
+	}
+
+	function OnCharacterDie(victim, killer, killerName) {
+		self._titanSpawner.OnCharacterDie(victim, killer, killerName);
+
+		if (killer != null && killer.Type == "Human" && self._titanSpawner.GetCount() == 0) {
+			self.NextWave();
+		}
+
+		if (killer != null) {
+			self.UpdateStatus();
+		}
+	}
+
+	function Restart() {
+		self._titanSpawner.Clear();
+		self._wave = 0;
+		self.NextWave();
+	}
+
+	function UpdateStatus() {
+		NetworkUtil.SetCustomProperty("ASO_wave", self._wave);
+		NetworkUtil.SetCustomProperty("ASO_titanCount", self._titanSpawner.GetCount());
+	}
+
+	function NextWave() {
+		self._wave += 1;
+		amount = self.StartTitans + (self._wave - 1) * self.AddTitansPerWave;
+		self._titanSpawner.SpawnTitans(amount);
+	}
 }
 
 class StandardLogic {
-  function Init(map) {
-    self._map = map;
-    self._playerSpawner = PlayerSpawner(map);
-  }
-  
-  function Activate(main) {
-    main.ListenOnTick.Add(self);
-    main.ListenOnSecond.Add(self);
-    main.ListenOnCharacterSpawn.Add(self);
-    main.ListenOnCharacterDie.Add(self);
-    self.UpdateStatus();
-    self._playerSpawner.Spawn();
-  }
-  
-  function Deactivate(main) {
-    main.ListenOnCharacterSpawn.Remove(self);
-    main.ListenOnCharacterDie.Remove(self);
-    main.ListenOnTick.Remove(self);
-    main.ListenOnSecond.Remove(self);
-  }
-  
-  function OnSecond() {
-    self._playerSpawner.EndlessRespawn();
-  }
-  
-  function OnTick() {
-    wave = Network.MasterClient.GetCustomProperty("WAVE_wave");
-    titanCount = Network.MasterClient.GetCustomProperty("WAVE_titanCount");
-    UI.SetLabel("TopCenter", "Titans Left: " + titanCount + "  Wave: " + wave);
-  }
+	function Init(map) {
+		self._map = map;
+		self._playerSpawner = PlayerSpawner(map);
+	}
 
-  function OnCharacterDie(victim, killer, killerName) {
-    if (killer != null && killer.IsMine && killer.Type == "Human" && victim.Type == "Titan") {
-      self.UpdateStatus();
-    }
-  }
+	function Activate(main) {
+		main.ListenOnTick.Add(self);
+		main.ListenOnSecond.Add(self);
+		main.ListenOnCharacterSpawn.Add(self);
+		main.ListenOnCharacterDie.Add(self);
+		self.UpdateStatus();
+		self._playerSpawner.Spawn();
+	}
 
-  function UpdateStatus() {
-    status = "[WAVE] " + Network.MyPlayer.Kills + "/" + Network.MyPlayer.Deaths + "/" + Network.MyPlayer.TotalDamage + "/" + Network.MyPlayer.HighestDamage;
-    NetworkUtil.SetCustomProperty("ScoreStatus", status);
-  }
- 
-  function OnCharacterSpawn(character) {
-    if (character.IsMine && character.Type == "Human") {
-      character.SetWeapon("Blades");
-      character.Team = "Human";
-    }
-  }
-  
-  function CanJoin() { return true; }
+	function Deactivate(main) {
+		main.ListenOnCharacterSpawn.Remove(self);
+		main.ListenOnCharacterDie.Remove(self);
+		main.ListenOnTick.Remove(self);
+		main.ListenOnSecond.Remove(self);
+	}
+
+	function OnSecond() {
+		self._playerSpawner.EndlessRespawn();
+	}
+
+	function OnTick() {
+		wave = Network.MasterClient.GetCustomProperty("WAVE_wave");
+		titanCount = Network.MasterClient.GetCustomProperty("WAVE_titanCount");
+		UI.SetLabel("TopCenter", "Titans Left: " + titanCount + "  Wave: " + wave);
+	}
+
+	function OnCharacterDie(victim, killer, killerName) {
+		if (killer != null && killer.IsMine && killer.Type == "Human" && victim.Type == "Titan") {
+			self.UpdateStatus();
+		}
+	}
+
+	function UpdateStatus() {
+		status = "[WAVE] " + Network.MyPlayer.Kills + "/" + Network.MyPlayer.Deaths + "/" + Network.MyPlayer.TotalDamage + "/" + Network.MyPlayer.HighestDamage;
+		NetworkUtil.SetCustomProperty("ScoreStatus", status);
+	}
+
+	function OnCharacterSpawn(character) {
+		if (character.IsMine && character.Type == "Human") {
+			character.SetWeapon("Blades");
+			character.Team = "Human";
+		}
+	}
+
+		function CanJoin() { return true; }
 }
 
 class MC_StandardLogic {
-  TitanCount = 10;
-  
-  _wave = 0;
-  
-  function Init(map) {
-    self._titanSpawner = TitanSpawner(map);
-    self.NextWave();
-  }
-  
-  function Activate(main) {
-    main.ListenOnSecond.Add(self);
-    main.ListenOnCharacterDie.Add(self);
-  }
-  
-  function Deactivate(main) {
-    main.ListenOnSecond.Remove(self);
-    main.ListenOnCharacterDie.Remove(self);
-  }
+	TitanCount = 10;
 
-  function OnSecond() {
-    self.UpdateStatus();
-  }
-  
-  function OnCharacterDie(victim, killer, killerName) {
-    self._titanSpawner.OnCharacterDie(victim, killer, killerName);
-    if (self._titanSpawner.GetCount() == 0) {
-      self.NextWave();
-    }
-    
-    if (killer != null) {
-      self.UpdateStatus();
-    }
-  }
-  
-  function UpdateStatus() {
-    NetworkUtil.SetCustomProperty("WAVE_wave", self._wave);
-    NetworkUtil.SetCustomProperty("WAVE_titanCount", self._titanSpawner.GetCount());
-  }
-  
-  function NextWave() {
-    self._titanSpawner.SpawnTitans(self.TitanCount);
-    self._wave += 1;
-  }
+	_wave = 0;
+
+	function Init(map) {
+		self._titanSpawner = TitanSpawner(map);
+		self.NextWave();
+	}
+
+	function Activate(main) {
+		main.ListenOnSecond.Add(self);
+		main.ListenOnCharacterDie.Add(self);
+	}
+
+	function Deactivate(main) {
+		main.ListenOnSecond.Remove(self);
+		main.ListenOnCharacterDie.Remove(self);
+	}
+
+	function OnSecond() {
+		self.UpdateStatus();
+	}
+
+	function OnCharacterDie(victim, killer, killerName) {
+		self._titanSpawner.OnCharacterDie(victim, killer, killerName);
+		if (self._titanSpawner.GetCount() == 0) {
+			self.NextWave();
+		}
+
+		if (killer != null) {
+			self.UpdateStatus();
+		}
+	}
+
+	function UpdateStatus() {
+		NetworkUtil.SetCustomProperty("WAVE_wave", self._wave);
+		NetworkUtil.SetCustomProperty("WAVE_titanCount", self._titanSpawner.GetCount());
+	}
+
+	function NextWave() {
+		self._titanSpawner.SpawnTitans(self.TitanCount);
+		self._wave += 1;
+	}
 }
 
 class AkinaLogic {
-  _playerSpawner = null;
-  _mapLoaded = false;
-  _startTime = 0;
-  _startBarriers = null;
-  _started = false;
-  _finished = false;
-  
-  function Init(mapOffset) {
-    self._mapOffset = mapOffset;
-  }
-  
-  function Activate(main) {
-    main.ListenOnTick.Add(self);
-    main.ListenOnAction.Add(self);
-    main.ListenOnLoadMap.Add(self);
-    main.ListenOnFinishRace.Add(self);
-    
-    main.UX.AddBind("Interaction/Function1", "Retry");
-    
-    if (self._mapLoaded) {
-      self.Reset();
-    } else {
-      main.MapLoader.Load("Akina");
-    }
-    
-    NetworkUtil.SetCustomProperty("ScoreStatus", "[AKINA]");
-  }
-  
-  function Deactivate(main) {
-    main.ListenOnTick.Remove(self);
-    main.ListenOnAction.Remove(self);
-    main.ListenOnLoadMap.Remove(self);
-    main.ListenOnFinishRace.Remove(self);
-    
-    main.UX.RemoveBind("Interaction/Function1", "Retry");
-  }
-  
-  function OnAction(action) {
-    if (action == "Retry") {
-      self.Reset();
-    }
-  }
-  
-  function OnLoadMap(map) {
-    map.Translate(self._mapOffset);
-    
-    self._playerSpawner = PlayerSpawner(map);
-    self._startBarriers = map.FindMapObjectsByName("Racing Start Barrier Cuboid");
-    
-    self._mapLoaded = true;
-    self.Reset();
-  }
-  
-  function OnFinishRace() {
-    if (self._finished) {
-      return;
-    }
-    
-    finishTime = String.FormatFloat(self.GetRaceTime(), 2);
-    UI.SetLabelForTime("MiddleCenter", "<color=white>" + Network.MyPlayer.Name + "</color> finished in " + finishTime + "s!", 5.0);
-    Game.PrintAll("<color=white>" + Network.MyPlayer.Name + "</color> finished Akina in " + finishTime + "s!");
-    NetworkUtil.SetCustomProperty("ScoreStatus", "[AKINA]" + finishTime + "s");
-    
-    self.SubmitScore();
-    self._finished = true;
-  }
-  
-  function OnTick() {
-    if (!self._mapLoaded) {
-      return;
-    }
-    
-    if (self.GetRaceTime() > 0) {
-      if (!self._started) {
-        for (barrier in self._startBarriers) {
-          barrier.Active = false;
-        }
-        self._started = true;
-      }
-      
-      UI.SetLabel("TopCenter", "Racing Time: " + String.FormatFloat(self.GetRaceTime(), 2));
-    } else {
-      UI.SetLabel("TopCenter", "Race Starts In: " + String.FormatFloat(Math.Abs(self.GetRaceTime()), 2));
-    }
-  }
-  
-  function GetRaceTime() {
-    return Time.GameTime - self._startTime;
-  }
-  
-  function Reset() {
-    for (barrier in self._startBarriers) {
-      barrier.Active = true;
-    }
-    
-    self._playerSpawner.Spawn();
-    self._started = false;
-    self._finished = false;
-    self._startTime = Time.GameTime + 5.0;
-  }
-  
-  function SubmitScore(roundTime) {
-    data = Dict();
-    data.Set("op", "PB_submit");
-    data.Set("category", "Akina");
-    data.Set("score", Math.Round(self.GetRaceTime() * 100));
-    Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
-  }
-  
-  function CanJoin() { return true; }
+	_playerSpawner = null;
+	_mapLoaded = false;
+	_startTime = 0;
+	_startBarriers = null;
+	_started = false;
+	_finished = false;
+
+	function Init(mapOffset) {
+		self._mapOffset = mapOffset;
+	}
+
+	function Activate(main) {
+		main.ListenOnTick.Add(self);
+		main.ListenOnAction.Add(self);
+		main.ListenOnLoadMap.Add(self);
+		main.ListenOnFinishRace.Add(self);
+
+		main.UX.AddBind("Interaction/Function1", "Retry");
+
+		if (self._mapLoaded) {
+			self.Reset();
+		} else {
+			main.MapLoader.Load("Akina");
+		}
+
+		NetworkUtil.SetCustomProperty("ScoreStatus", "[AKINA]");
+	}
+
+	function Deactivate(main) {
+		main.ListenOnTick.Remove(self);
+		main.ListenOnAction.Remove(self);
+		main.ListenOnLoadMap.Remove(self);
+		main.ListenOnFinishRace.Remove(self);
+
+		main.UX.RemoveBind("Interaction/Function1", "Retry");
+	}
+
+	function OnAction(action) {
+		if (action == "Retry") {
+			self.Reset();
+		}
+	}
+
+	function OnLoadMap(map) {
+		map.Translate(self._mapOffset);
+
+		self._playerSpawner = PlayerSpawner(map);
+		self._startBarriers = map.FindMapObjectsByName("Racing Start Barrier Cuboid");
+
+		self._mapLoaded = true;
+		self.Reset();
+	}
+
+	function OnFinishRace() {
+		if (self._finished) {
+			return;
+		}
+
+		finishTime = String.FormatFloat(self.GetRaceTime(), 2);
+		UI.SetLabelForTime("MiddleCenter", "<color=white>" + Network.MyPlayer.Name + "</color> finished in " + finishTime + "s!", 5.0);
+		Game.PrintAll("<color=white>" + Network.MyPlayer.Name + "</color> finished Akina in " + finishTime + "s!");
+		NetworkUtil.SetCustomProperty("ScoreStatus", "[AKINA]" + finishTime + "s");
+
+		self.SubmitScore();
+		self._finished = true;
+	}
+
+	function OnTick() {
+		if (!self._mapLoaded) {
+			return;
+		}
+
+		if (self.GetRaceTime() > 0) {
+			if (!self._started) {
+				for (barrier in self._startBarriers) {
+					barrier.Active = false;
+				}
+				self._started = true;
+			}
+
+			UI.SetLabel("TopCenter", "Racing Time: " + String.FormatFloat(self.GetRaceTime(), 2));
+		} else {
+			UI.SetLabel("TopCenter", "Race Starts In: " + String.FormatFloat(Math.Abs(self.GetRaceTime()), 2));
+		}
+	}
+
+	function GetRaceTime() {
+		return Time.GameTime - self._startTime;
+	}
+
+	function Reset() {
+		for (barrier in self._startBarriers) {
+			barrier.Active = true;
+		}
+
+		self._playerSpawner.Spawn();
+		self._started = false;
+		self._finished = false;
+		self._startTime = Time.GameTime + 5.0;
+	}
+
+	function SubmitScore(roundTime) {
+		data = Dict();
+		data.Set("op", "PB_submit");
+		data.Set("category", "Akina");
+		data.Set("score", Math.Round(self.GetRaceTime() * 100));
+		Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
+	}
+
+		function CanJoin() { return true; }
 }
 
 class MC_MapTransferLogic {
-  _transfer = Dict();
-  
-  function Init() {
-    self.CreateTransfer("Akina");
-  }
-  
-  function Activate(main) {
-    main.ListenOnNetworkMessage.Add(self);
-  }
-  
-  function Deactivate(main) {
-    main.ListenOnNetworkMessage.Remove(self);
-  }
-  
-  function OnNetworkMessage(sender, message) {
-    data = Json.LoadFromString(message);
-    
-    if (data.Get("op") == "MAP_request") {
-      name = data.Get("name");
-      self.Transfer(sender, name);
-    }
-  }
-  
-  function Transfer(player, name) {
-    if (!self._transfer.Contains(name)) {
-      return;
-    }
-    
-    self.TransferAsync(player, name);
-  }
-  
-  function TransferAsync(player, name) {
-    payload = self._transfer.Get(name);
-    
-    totalLength = String.Length(payload);
-    chunkCount = Math.Ceil(totalLength / 10000.0);
-    
-    for (i in Range(0, chunkCount, 1)) {
-      chunk = String.SubstringWithLength(payload, i * 10000, Math.Min(totalLength, 10000));
-      
-      data = Dict();
-      data.Set("op", "MAP_chunk");
-      data.Set("name", name);
-      data.Set("body", chunk);
-      Network.SendMessage(player, Json.SaveToString(data));
-      
-      totalLength -= 10000;
-      wait 0.5;
-    }
-    
-    data = Dict();
-    data.Set("op", "MAP_done");
-    data.Set("name", name);
-    Network.SendMessage(player, Json.SaveToString(data));
-  }
-  
-  function CreateTransfer(name) {
-    fileName = "Map_" + name;
-    
-    if (!PersistentData.FileExists(fileName)) {
-      Game.Print("<color=red>Missing map '" + name + "'.</color>");
-      return;
-    }
-    
-    map = MapUtil.LoadFromFile(fileName);
-    self._transfer.Set(name, Json.SaveToString(map));
-  }
+	_transfer = Dict();
+
+	function Init() {
+		self.CreateTransfer("Akina");
+	}
+
+	function Activate(main) {
+		main.ListenOnNetworkMessage.Add(self);
+	}
+
+	function Deactivate(main) {
+		main.ListenOnNetworkMessage.Remove(self);
+	}
+
+	function OnNetworkMessage(sender, message) {
+		data = Json.LoadFromString(message);
+
+		if (data.Get("op") == "MAP_request") {
+			name = data.Get("name");
+			self.Transfer(sender, name);
+		}
+	}
+
+	function Transfer(player, name) {
+		if (!self._transfer.Contains(name)) {
+			return;
+		}
+
+		self.TransferAsync(player, name);
+	}
+
+	function TransferAsync(player, name) {
+		payload = self._transfer.Get(name);
+
+		totalLength = String.Length(payload);
+		chunkCount = Math.Ceil(totalLength / 10000.0);
+
+		for (i in Range(0, chunkCount, 1)) {
+			chunk = String.SubstringWithLength(payload, i * 10000, Math.Min(totalLength, 10000));
+
+			data = Dict();
+			data.Set("op", "MAP_chunk");
+			data.Set("name", name);
+			data.Set("body", chunk);
+			Network.SendMessage(player, Json.SaveToString(data));
+
+			totalLength -= 10000;
+			wait 0.5;
+		}
+
+		data = Dict();
+		data.Set("op", "MAP_done");
+		data.Set("name", name);
+		Network.SendMessage(player, Json.SaveToString(data));
+	}
+
+	function CreateTransfer(name) {
+		fileName = "Map_" + name;
+
+		if (!PersistentData.FileExists(fileName)) {
+			Game.Print("<color=red>Missing map '" + name + "'.</color>");
+			return;
+		}
+
+		map = MapUtil.LoadFromFile(fileName);
+		self._transfer.Set(name, Json.SaveToString(map));
+	}
 }
 
 class MapLoaderLogic {
-  _downloads = Dict();
-  
-  function Activate(main) {
-    main.ListenOnNetworkMessage.Add(self);
-  }
-  
-  function Deactivate(main) {
-    main.ListenOnNetworkMessage.Remove(self);
-  }
-  
-  function OnNetworkMessage(sender, message) {
-    if (sender != Network.MasterClient) {
-      return;
-    }
-    
-    data = Json.LoadFromString(message);
-    
-    if (data.Get("op") == "MAP_chunk") {
-      self.SaveChunk(data);
-    } elif (data.Get("op") == "MAP_done") {
-      self.FinishDownload(data);
-    }
-  }
-  
-  function FinishDownload(data) {
-    name = data.Get("name");
-    map = Json.LoadFromString(self._downloads.Get(name));
-    self._downloads.Remove(name):
-    
-    MapUtil.SaveToFile("Map_" + name, map);
-    objects = self.CreateMap(map);
-    
-    MainController.OnLoadMap(MapSubset(objects));
-    
-    Game.Print("Finished downloading map '" + name + "'.");
-  }
-  
-  function SaveChunk(data) {
-    name = data.Get("name");
-    chunk = data.Get("body");
-    self._downloads.Set(name, self._downloads.Get(name, "") + chunk);
-  }
-  
-  function Load(name) {
-    fileName = "Map_" + name;
-    if (PersistentData.FileExists(fileName)) {
-      map = MapUtil.LoadFromFile(fileName);
-      objects = self.CreateMap(map);
-      MainController.OnLoadMap(MapSubset(objects));
-      Game.Print("Loaded '" + name + "' from file.");
-    } else {
-      self.RequestMap(name);
-    }
-  }
-  
-  function CreateMap(map) {
-    t = map.Get("t", "");
-    N = map.Get("n", 0);
-    M = String.Length(t);
-    
-    columns = List();
-    
-    for (i in Range(0, M, 1)) {
-      b = String.SubstringWithLength(t, i, 1);
-      data = map.Get(Convert.ToString(i), "");
-      if (b == "0") {
-        columns.Add(self.DecompressColumnRLE(data));
-      } elif (b == "1") {
-        columns.Add(self.DecompressColumn(data));
-      }
-    }
-    
-    objects = List();
-    
-    for (k in Range(N)) {
-      objects.Add(self.LoadRow(columns, k, M));
-    }
-    
-    return objects;
-  }
-  
-  function RequestMap(name) {
-    data = Dict();
-    data.Set("op", "MAP_request");
-    data.Set("name", name);
-    Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
-  }
-  
-  function LoadRow(columns, k, M) {
-    row = List();
-    for (i in Range(M)) {
-      row.Add(columns.Get(i).Get(k));
-    }
-    
-    c = null;
-    if (row.Get(22) != ";" && row.Get(22) != "") {
-      c = String.Split(row.Get(22), "|").Get(0);
-      row.Set(22, "");
-    }
-    
-    row = String.Join(row, ",");
-    obj = Map.CreateMapObjectRaw(row);
-    
-    if (c != null) {
-      obj.AddComponent(c);
-    }
-    
-    return obj;
-  }
-  
-  function DecompressColumn(data) {
-    lzw = LZW(data);
-    return String.Split(lzw.Decompress(), ",");
-  }
-  
-  function DecompressColumnRLE(data) {
-    lzw = LZW(data);
-    items = String.Split(lzw.Decompress(), ",");
-    
-    column = List();
-    for (i in Range(0, items.Count, 2)) {
-      a = Convert.ToInt(items.Get(i + 0));
-      b = items.Get(i + 1);
-      for (j in Range(0, a, 1)) {
-        column.Add(b);
-      }
-    }
-    
-    return column;
-  }
+	_downloads = Dict();
+
+	function Activate(main) {
+		main.ListenOnNetworkMessage.Add(self);
+	}
+
+	function Deactivate(main) {
+		main.ListenOnNetworkMessage.Remove(self);
+	}
+
+	function OnNetworkMessage(sender, message) {
+		if (sender != Network.MasterClient) {
+			return;
+		}
+
+		data = Json.LoadFromString(message);
+
+		if (data.Get("op") == "MAP_chunk") {
+			self.SaveChunk(data);
+		} elif (data.Get("op") == "MAP_done") {
+			self.FinishDownload(data);
+		}
+	}
+
+	function FinishDownload(data) {
+		name = data.Get("name");
+		map = Json.LoadFromString(self._downloads.Get(name));
+		self._downloads.Remove(name):
+
+		MapUtil.SaveToFile("Map_" + name, map);
+		objects = self.CreateMap(map);
+
+		MainController.OnLoadMap(MapSubset(objects));
+
+		Game.Print("Finished downloading map '" + name + "'.");
+	}
+
+	function SaveChunk(data) {
+		name = data.Get("name");
+		chunk = data.Get("body");
+		self._downloads.Set(name, self._downloads.Get(name, "") + chunk);
+	}
+
+	function Load(name) {
+		fileName = "Map_" + name;
+		if (PersistentData.FileExists(fileName)) {
+			map = MapUtil.LoadFromFile(fileName);
+			objects = self.CreateMap(map);
+			MainController.OnLoadMap(MapSubset(objects));
+			Game.Print("Loaded '" + name + "' from file.");
+		} else {
+			self.RequestMap(name);
+		}
+	}
+
+	function CreateMap(map) {
+		t = map.Get("t", "");
+		N = map.Get("n", 0);
+		M = String.Length(t);
+
+		columns = List();
+
+		for (i in Range(0, M, 1)) {
+			b = String.SubstringWithLength(t, i, 1);
+			data = map.Get(Convert.ToString(i), "");
+			if (b == "0") {
+				columns.Add(self.DecompressColumnRLE(data));
+			} elif (b == "1") {
+				columns.Add(self.DecompressColumn(data));
+			}
+		}
+
+		objects = List();
+
+		for (k in Range(N)) {
+			objects.Add(self.LoadRow(columns, k, M));
+		}
+
+		return objects;
+	}
+
+	function RequestMap(name) {
+		data = Dict();
+		data.Set("op", "MAP_request");
+		data.Set("name", name);
+		Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
+	}
+
+	function LoadRow(columns, k, M) {
+		row = List();
+		for (i in Range(M)) {
+			row.Add(columns.Get(i).Get(k));
+		}
+
+		c = null;
+		if (row.Get(22) != ";" && row.Get(22) != "") {
+			c = String.Split(row.Get(22), "|").Get(0);
+			row.Set(22, "");
+		}
+
+		row = String.Join(row, ",");
+		obj = Map.CreateMapObjectRaw(row);
+
+		if (c != null) {
+			obj.AddComponent(c);
+		}
+
+		return obj;
+	}
+
+	function DecompressColumn(data) {
+		lzw = LZW(data);
+		return String.Split(lzw.Decompress(), ",");
+	}
+
+	function DecompressColumnRLE(data) {
+		lzw = LZW(data);
+		items = String.Split(lzw.Decompress(), ",");
+
+		column = List();
+		for (i in Range(0, items.Count, 2)) {
+			a = Convert.ToInt(items.Get(i + 0));
+			b = items.Get(i + 1);
+			for (j in Range(0, a, 1)) {
+				column.Add(b);
+			}
+		}
+
+		return column;
+	}
 }
 
 class HubLogic {
-  function Init(map) {
-    self._map = map;
-    self._playerSpawner = PlayerSpawner(map);
-    self._chair = Map.CreateMapObjectRaw("Scene,None,6969,0,1,0,1,0,GlobalChair,0,0,50,0,0,0,1,1,1,Physical,Entities,Default,Default|255/255/255/255,");
-  }
-  
-  function Activate(main) {
-    main.ListenOnAction.Add(self);
-    main.ListenOnSecond.Add(self);
-    main.ListenOnCharacterSpawn.Add(self);
-    
-    main.UX.AddBind("Interaction/Function1", "Sit");
-    main.UX.AddBind("Interaction/Function2", "Lay");
-    main.UX.AddBind("Interaction/Function3", "Sleep");
-    main.UX.AddBind("Interaction/Function4", "Stand");
-    
-    UI.SetLabel("TopCenter", "");
-    NetworkUtil.SetCustomProperty("ScoreStatus", "[HUB]");
-    self._playerSpawner.Spawn();
-  }
-  
-  function Deactivate(main) {
-    main.ListenOnAction.Remove(self);
-    main.ListenOnSecond.Remove(self);
-    main.ListenOnCharacterSpawn.Remove(self);
-    
-    main.UX.RemoveBind("Interaction/Function1");
-    main.UX.RemoveBind("Interaction/Function2");
-    main.UX.RemoveBind("Interaction/Function3");
-    main.UX.RemoveBind("Interaction/Function4");
-  }
-  
-  function OnCharacterSpawn(character) {
-    if (character.IsMine && character.Type == "Human") {
-      character.SetWeapon("Blades");
-      character.CurrentBlade = 0;
-      character.CurrentBladeDurability = 0;
-      character.Team = "Human";
-    }
-  }
-  
-  function OnSecond() {
-    self._playerSpawner.EndlessRespawn();
-  }
+	function Init(map) {
+		self._map = map;
+		self._playerSpawner = PlayerSpawner(map);
+		self._chair = Map.CreateMapObjectRaw("Scene,None,6969,0,1,0,1,0,GlobalChair,0,0,50,0,0,0,1,1,1,Physical,Entities,Default,Default|255/255/255/255,");
+	}
 
-  function OnAction(action) {
-    me = Network.MyPlayer.Character;
-    if (me == null) {
-      return;
-    }
-    
-    if (me.IsMounted) {
-      me.Unmount();
-      return;
-    }
-    
-    delta = me.Position - self._chair.Position;
-    if (action == "Sit") {
-      me.MountMapObject(self._chair, delta, Vector3(0, me.Rotation.Y, 0));
-      me.PlayAnimation("Armature|horse_idle");
-    }
-    
-    if (action == "Lay") {
-      me.MountMapObject(self._chair, delta + Vector3(0, -0.10, 0), Vector3(0, me.Rotation.Y, 0));
-      me.PlayAnimation("Armature|slide");
-    }
-    
-    if (action == "Sleep") {
-      me.MountMapObject(self._chair, delta + Vector3(0, 0.25, 0), Vector3(-90, me.Rotation.Y, 0));
-      me.PlayAnimation("Armature|idle_TS_M");
-    }
-    
-    if (action == "Stand") {
-      me.Unmount();
-    }
-  }
-  
-  function CanJoin() { return true; }
+	function Activate(main) {
+		main.ListenOnAction.Add(self);
+		main.ListenOnSecond.Add(self);
+		main.ListenOnCharacterSpawn.Add(self);
+
+		main.UX.AddBind("Interaction/Function1", "Sit");
+		main.UX.AddBind("Interaction/Function2", "Lay");
+		main.UX.AddBind("Interaction/Function3", "Sleep");
+		main.UX.AddBind("Interaction/Function4", "Stand");
+
+		UI.SetLabel("TopCenter", "");
+		NetworkUtil.SetCustomProperty("ScoreStatus", "[HUB]");
+		self._playerSpawner.Spawn();
+	}
+
+	function Deactivate(main) {
+		main.ListenOnAction.Remove(self);
+		main.ListenOnSecond.Remove(self);
+		main.ListenOnCharacterSpawn.Remove(self);
+
+		main.UX.RemoveBind("Interaction/Function1");
+		main.UX.RemoveBind("Interaction/Function2");
+		main.UX.RemoveBind("Interaction/Function3");
+		main.UX.RemoveBind("Interaction/Function4");
+	}
+
+	function OnCharacterSpawn(character) {
+		if (character.IsMine && character.Type == "Human") {
+			character.SetWeapon("Blades");
+			character.CurrentBlade = 0;
+			character.CurrentBladeDurability = 0;
+			character.Team = "Human";
+		}
+	}
+
+	function OnSecond() {
+		self._playerSpawner.EndlessRespawn();
+	}
+
+	function OnAction(action) {
+		me = Network.MyPlayer.Character;
+		if (me == null) {
+			return;
+		}
+
+		if (me.IsMounted) {
+			me.Unmount();
+			return;
+		}
+
+		delta = me.Position - self._chair.Position;
+		if (action == "Sit") {
+			me.MountMapObject(self._chair, delta, Vector3(0, me.Rotation.Y, 0));
+			me.PlayAnimation("Armature|horse_idle");
+		}
+
+		if (action == "Lay") {
+			me.MountMapObject(self._chair, delta + Vector3(0, -0.10, 0), Vector3(0, me.Rotation.Y, 0));
+			me.PlayAnimation("Armature|slide");
+		}
+
+		if (action == "Sleep") {
+			me.MountMapObject(self._chair, delta + Vector3(0, 0.25, 0), Vector3(-90, me.Rotation.Y, 0));
+			me.PlayAnimation("Armature|idle_TS_M");
+		}
+
+		if (action == "Stand") {
+			me.Unmount();
+		}
+	}
+
+		function CanJoin() { return true; }
 }
 
 class AfkLogic {
-  AfkLimit = 30.0;
-  _afkTimer = 30.0;
-  
-  function Activate(main) {
-    main.ListenOnSecond.Add(self);
-  }
-  
-  function Deactivate(main) {
-    main.ListenOnSecond.Remove(self);
-  }
-  
-  function OnSecond() {
-    me = Network.MyPlayer.Character;
-    
-    isHubMode = Network.MyPlayer.GetCustomProperty("CurrentMode") == "HUB";
-    
-    if (me != null && me.Velocity.Magnitude < 0.3 && !isHubMode && !me.IsCarried) {
-      self._afkTimer -= 1.0;
-      if (self._afkTimer < 0.0) {
-        MainController.SwitchMode("HUB"); 
-      }
-    } else {
-      self._afkTimer = self.AfkLimit;
-    }
-  }
+	AfkLimit = 30.0;
+	_afkTimer = 30.0;
+
+	function Activate(main) {
+		main.ListenOnSecond.Add(self);
+	}
+
+	function Deactivate(main) {
+		main.ListenOnSecond.Remove(self);
+	}
+
+	function OnSecond() {
+		me = Network.MyPlayer.Character;
+
+		isHubMode = Network.MyPlayer.GetCustomProperty("CurrentMode") == "HUB";
+
+		if (me != null && me.Velocity.Magnitude < 0.3 && !isHubMode && !me.IsCarried) {
+			self._afkTimer -= 1.0;
+			if (self._afkTimer < 0.0) {
+				MainController.SwitchMode("HUB");
+			}
+		} else {
+			self._afkTimer = self.AfkLimit;
+		}
+	}
 }
 
 class PlayerSpawner {
-  ReviveAfter = 5;
-  
-  _deadTime = 0;
-  
-  function Init(map) {
-    self._spawns = map.FindMapObjectsByName("Human SpawnPoint");
-  }
-  
-  function EndlessRespawn() {
-    if (Network.MyPlayer.Status == "Dead") {
-      self._deadTime += 1;
-      if (self._deadTime > self.ReviveAfter) {
-        self.Spawn();
-      }
-    }
-  }
-  
-  function Spawn() {
-    randomSpawn = self._spawns.Get(Random.RandomInt(0, self._spawns.Count - 1));
-    if (Network.MyPlayer.Status == "Spectating") {
-      Network.MyPlayer.SpawnPoint = randomSpawn.Position;
-    } else {
-      Game.SpawnPlayerAt(Network.MyPlayer, true, randomSpawn.Position);
-      self._deadTime = 0;
-    }
-  }
+	ReviveAfter = 5;
+
+	_deadTime = 0;
+
+	function Init(map) {
+		self._spawns = map.FindMapObjectsByName("Human SpawnPoint");
+	}
+
+	function EndlessRespawn() {
+		if (Network.MyPlayer.Status == "Dead") {
+			self._deadTime += 1;
+			if (self._deadTime > self.ReviveAfter) {
+				self.Spawn();
+			}
+		}
+	}
+
+	function Spawn() {
+		randomSpawn = self._spawns.Get(Random.RandomInt(0, self._spawns.Count - 1));
+		if (Network.MyPlayer.Status == "Spectating") {
+			Network.MyPlayer.SpawnPoint = randomSpawn.Position;
+		} else {
+			Game.SpawnPlayerAt(Network.MyPlayer, true, randomSpawn.Position);
+			self._deadTime = 0;
+		}
+	}
 }
 
 class TitanSpawner {
-  function Init(map) {
-    self._spawns = map.FindMapObjectsByName("Titan SpawnPoint");
-    self._titans = Dict();
-  }
-  
-  function OnCharacterDie(victim, killer, killerName) {
-    if (self._titans.Contains(victim.ViewID)) {
-      self._titans.Remove(victim.ViewID);
-    }
-  }
-  
-  function Clear() {
-    titanCache = List();
-    for (titan in self._titans.Values) {
-      titan.Position = new Vector3(0, -10000, 0);
-      titanCache.Add(titan);
-    }
-    self.ClearAsync(titanCache);
-    self._titans.Clear();
-  }
-  
-  coroutine ClearAsync(titanCache) {
-    for (titan in titanCache) {
-      titan.GetKilled("");
-      wait 0.3;
-    }
-  }
-  
-  function GetCount() {
-    return self._titans.Count;
-  }
-  
-  coroutine SpawnTitans(count) {
-    for (i in Range(count)) {
-      randomSpawn = self._spawns.Get(Random.RandomInt(0, self._spawns.Count - 1));
-      t = Game.SpawnTitanAt("Default", randomSpawn.Position);
-      t.Wander();
-      t.DetectRange = 2000;
-      t.FocusRange = 2000;
-      self._titans.Set(t.ViewID, t);
-      wait 0.1;
-    }
-  }
+	function Init(map) {
+		self._spawns = map.FindMapObjectsByName("Titan SpawnPoint");
+		self._titans = Dict();
+	}
+
+	function OnCharacterDie(victim, killer, killerName) {
+		if (self._titans.Contains(victim.ViewID)) {
+			self._titans.Remove(victim.ViewID);
+		}
+	}
+
+	function Clear() {
+		titanCache = List();
+		for (titan in self._titans.Values) {
+			titan.Position = new Vector3(0, -10000, 0);
+			titanCache.Add(titan);
+		}
+		self.ClearAsync(titanCache);
+		self._titans.Clear();
+	}
+
+	coroutine ClearAsync(titanCache) {
+		for (titan in titanCache) {
+			titan.GetKilled("");
+			wait 0.3;
+		}
+	}
+
+	function GetCount() {
+		return self._titans.Count;
+	}
+
+	coroutine SpawnTitans(count) {
+		for (i in Range(count)) {
+			randomSpawn = self._spawns.Get(Random.RandomInt(0, self._spawns.Count - 1));
+			t = Game.SpawnTitanAt("Default", randomSpawn.Position);
+			t.Wander();
+			t.DetectRange = 2000;
+			t.FocusRange = 2000;
+			self._titans.Set(t.ViewID, t);
+			wait 0.1;
+		}
+	}
 }
 
 class MapSubset {
-  function Init(mapObjects) {
-    self._mapObjects = mapObjects;
-  }
-  
-  function Translate(offset) {
-    for (obj in self._mapObjects) {
-      obj.Position = obj.Position + offset;
-    }
-  }
-  
-  function FindMapObjectsByName(name) {
-    res = List();
-    for (obj in self._mapObjects) {
-      if (obj.Name == name) {
-        res.Add(obj);
-      }
-    }
-    return res;
-  }
-  
-  function CreateCopy(offset) {
-    copyObjects = List();
-    for (obj in self._mapObjects) {
-      if (obj.Name == "Daylight") {
-        continue;
-      }
-      copy = Map.CopyMapObject(obj, true);
-      copy.Position = obj.Position + offset;
-      copyObjects.Add(copy);
-    }
-    return MapSubset(copyObjects);
-  }
+	function Init(mapObjects) {
+		self._mapObjects = mapObjects;
+	}
+
+	function Translate(offset) {
+		for (obj in self._mapObjects) {
+			obj.Position = obj.Position + offset;
+		}
+	}
+
+	function FindMapObjectsByName(name) {
+		res = List();
+		for (obj in self._mapObjects) {
+			if (obj.Name == name) {
+				res.Add(obj);
+			}
+		}
+		return res;
+	}
+
+	function CreateCopy(offset) {
+		copyObjects = List();
+		for (obj in self._mapObjects) {
+			if (obj.Name == "Daylight") {
+				continue;
+			}
+			copy = Map.CopyMapObject(obj, true);
+			copy.Position = obj.Position + offset;
+			copyObjects.Add(copy);
+		}
+		return MapSubset(copyObjects);
+	}
 }
 
 class MC_LeaderboardLogic {
-  _leaderboards = Dict();
-  _displayTime = "k";
-  
-  function Init() {
-    self._leaderboards.Set("100s", Leaderboard("ASO_100s", false, "k"));
-    self._leaderboards.Set("300s", Leaderboard("ASO_300s", false, "k"));
-    self._leaderboards.Set("600s", Leaderboard("ASO_600s", false, "k"));
-    self._leaderboards.Set("Akina", Leaderboard("Akina", true, "s"));
-  }
-  
-  function Activate(main) {
-    main.ListenOnNetworkMessage.Add(self);
-  }
-  
-  function Deactivate(main) {
-    main.ListenOnNetworkMessage.Remove(self);
-  }
-  
-  function OnNetworkMessage(sender, message) {
-    data = Json.LoadFromString(message);
-    if (data.Get("op") == "PB_request") {
-      self.LeaderboardResponse(sender, data.Get("category"));
-    } elif (data.Get("op") == "PB_submit") {
-      self.LeaderboardSubmit(sender.Name, data.Get("category"), data.Get("score"));
-    }
-  }
-  
-  function LeaderboardSubmit(name, category, score) {
-    if (self._leaderboards.Contains(category)) {
-      leaderboard = self._leaderboards.Get(category);
-      leaderboard.Submit(name, score);
-    }
-  }
-  
-  function LeaderboardResponse(sender, category) {
-    if (!self._leaderboards.Contains(category)) {
-      return;
-    }
-    
-    leaderboard = self._leaderboards.Get(category);
-    result = leaderboard.Retrieve();
-    
-    text = "<color=#00ccff><size=30>- Leaderboard " + category + " -</size></color>" + String.Newline;
-    
-    index = 1;
-    for (entry in result) {
-      name = entry.Get(0);
-      score = entry.Get(1);
-      text += index + ". " + name + " - " + score + String.Newline;
-      index += 1;
-    }
-    
-    data = Dict();
-    data.Set("op", "UI_popup");
-    data.Set("body", text);
-    
-    Network.SendMessage(sender, Json.SaveToString(data));
-  }
+	_leaderboards = Dict();
+	_displayTime = "k";
+
+	function Init() {
+		self._leaderboards.Set("100s", Leaderboard("ASO_100s", false, "k"));
+		self._leaderboards.Set("300s", Leaderboard("ASO_300s", false, "k"));
+		self._leaderboards.Set("600s", Leaderboard("ASO_600s", false, "k"));
+		self._leaderboards.Set("Akina", Leaderboard("Akina", true, "s"));
+	}
+
+	function Activate(main) {
+		main.ListenOnNetworkMessage.Add(self);
+	}
+
+	function Deactivate(main) {
+		main.ListenOnNetworkMessage.Remove(self);
+	}
+
+	function OnNetworkMessage(sender, message) {
+		data = Json.LoadFromString(message);
+		if (data.Get("op") == "PB_request") {
+			self.LeaderboardResponse(sender, data.Get("category"));
+		} elif (data.Get("op") == "PB_submit") {
+			self.LeaderboardSubmit(sender.Name, data.Get("category"), data.Get("score"));
+		}
+	}
+
+	function LeaderboardSubmit(name, category, score) {
+		if (self._leaderboards.Contains(category)) {
+			leaderboard = self._leaderboards.Get(category);
+			leaderboard.Submit(name, score);
+		}
+	}
+
+	function LeaderboardResponse(sender, category) {
+		if (!self._leaderboards.Contains(category)) {
+			return;
+		}
+
+		leaderboard = self._leaderboards.Get(category);
+		result = leaderboard.Retrieve();
+
+		text = "<color=#00ccff><size=30>- Leaderboard " + category + " -</size></color>" + String.Newline;
+
+		index = 1;
+		for (entry in result) {
+			name = entry.Get(0);
+			score = entry.Get(1);
+			text += index + ". " + name + " - " + score + String.Newline;
+			index += 1;
+		}
+
+		data = Dict();
+		data.Set("op", "UI_popup");
+		data.Set("body", text);
+
+		Network.SendMessage(sender, Json.SaveToString(data));
+	}
 }
 
 class LeaderboardLogic {
-  function Init() {
-    self.CreateLeaderboardPopup();
-  }
-  
-  function Activate(main) {
-    main.ListenOnButtonClick.Add(self);
-    main.ListenOnAction.Add(self);
-  }
-  
-  function Deactivate(main) {
-    main.ListenOnButtonClick.Remove(self);
-    main.ListenOnAction.Remove(self);
-  }
-  
-  function OnAction(action) {
-    if (action == "LeaderboardShow") {
-      UI.ShowPopup("LeaderboardMenu");
-    }
-  }
-  
-  function OnButtonClick(button) {
-    if (button == "PB_aso100s") {
-      self.LeaderboardRequest("100s");
-    } elif (button == "PB_aso300s") {
-      self.LeaderboardRequest("300s");
-    } elif (button == "PB_aso600s") {
-      self.LeaderboardRequest("600s");
-    } elif (button == "PB_akina") {
-      self.LeaderboardRequest("Akina");
-    }
-  }
-  
-  function LeaderboardRequest(category) {
-    data = Dict();
-    data.Set("op", "PB_request");
-    data.Set("category", category);
-    Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
-  }
-  
-  function CreateLeaderboardPopup() {
-    UI.CreatePopup("LeaderboardMenu", "Leaderboard", 300, 400);
-    UI.AddPopupButton("LeaderboardMenu", "PB_aso100s", "100s");
-    UI.AddPopupButton("LeaderboardMenu", "PB_aso300s", "300s");
-    UI.AddPopupButton("LeaderboardMenu", "PB_aso600s", "600s");
-    UI.AddPopupButton("LeaderboardMenu", "PB_akina", "Akina");
-  }
+	function Init() {
+		self.CreateLeaderboardPopup();
+	}
+
+	function Activate(main) {
+		main.ListenOnButtonClick.Add(self);
+		main.ListenOnAction.Add(self);
+	}
+
+	function Deactivate(main) {
+		main.ListenOnButtonClick.Remove(self);
+		main.ListenOnAction.Remove(self);
+	}
+
+	function OnAction(action) {
+		if (action == "LeaderboardShow") {
+			UI.ShowPopup("LeaderboardMenu");
+		}
+	}
+
+	function OnButtonClick(button) {
+		if (button == "PB_aso100s") {
+			self.LeaderboardRequest("100s");
+		} elif (button == "PB_aso300s") {
+			self.LeaderboardRequest("300s");
+		} elif (button == "PB_aso600s") {
+			self.LeaderboardRequest("600s");
+		} elif (button == "PB_akina") {
+			self.LeaderboardRequest("Akina");
+		}
+	}
+
+	function LeaderboardRequest(category) {
+		data = Dict();
+		data.Set("op", "PB_request");
+		data.Set("category", category);
+		Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
+	}
+
+	function CreateLeaderboardPopup() {
+		UI.CreatePopup("LeaderboardMenu", "Leaderboard", 300, 400);
+		UI.AddPopupButton("LeaderboardMenu", "PB_aso100s", "100s");
+		UI.AddPopupButton("LeaderboardMenu", "PB_aso300s", "300s");
+		UI.AddPopupButton("LeaderboardMenu", "PB_aso600s", "600s");
+		UI.AddPopupButton("LeaderboardMenu", "PB_akina", "Akina");
+	}
 }
 
 class Leaderboard {
-  _scores = Dict();
-  
-  function Init(name, isAscending, displayType) {
-    self._isAscending = isAscending;
-    self._fileName = "Leaderboard_" + name;
-    self._displayType = displayType;
-    self.Load();
-  }
-  
-  function Submit(name, score) {
-    if (self._scores.Contains(name)) {
-      if (self._isAscending) {
-        if (score > self._scores.Get(name)) { return; }
-      } else {
-        if (score < self._scores.Get(name)) { return; }
-      }
-    }
-    
-    self._scores.Set(name, score);
-    self.Save();
-  }
-  
-  function Load() {
-    if (!PersistentData.FileExists(self._fileName)) {
-      return;
-    }
-    
-    PersistentData.Clear();
-    PersistentData.LoadFromFile(self._fileName, false);
-    data = PersistentData.GetProperty("scores", "");
-    
-    self._scores = Json.LoadFromString(data);
-  }
-  
-  function Save() {
-    PersistentData.Clear();
-    PersistentData.SetProperty("scores", Json.SaveToString(self._scores));
-    PersistentData.SaveToFile(self._fileName, false);
-  }
-  
-  function Retrieve() {
-    result = List();
-    
-    index = 0;
-    total = 0;
-    names = List();
-    scores = List();
+	_scores = Dict();
 
-    for (key in self._scores.Keys) {
-      value = self._scores.Get(key);
-      scores.Add(Convert.ToInt(value) * 256 + index);
-      names.Add(key);
-      index += 1;
-    }
+	function Init(name, isAscending, displayType) {
+		self._isAscending = isAscending;
+		self._fileName = "Leaderboard_" + name;
+		self._displayType = displayType;
+		self.Load();
+	}
 
-    scores.Sort();
-    
-    if (self._isAscending) {
-      startIndex = 0;
-      endIndex = scores.Count;
-      step = 1;
-    } else {
-      startIndex = scores.Count - 1;
-      endIndex = -1;
-      step = -1;
-    }
-    
-    result = List();
-    index = 1;
-    
-    for (i in Range(startIndex, endIndex, step)) {
-      score = Math.Floor(scores.Get(i) / 256);
-      if (self._displayType == "k") {
-        score = Math.Round(score / 1000.0) + "k";
-      } elif (self._displayType == "s") {
-        score = String.FormatFloat(score / 100.0, 2) + "s";
-      } else {
-        score = entry.Get(1);
-      }
-      
-      name = names.Get(Math.Mod(scores.Get(i), 256));
-      
-      entry = List();
-      entry.Add(name);
-      entry.Add(score);
-      result.Add(entry);
-      
-      index += 1;
-    }
+	function Submit(name, score) {
+		if (self._scores.Contains(name)) {
+			if (self._isAscending) {
+					if (score > self._scores.Get(name)) { return; }
+			} else {
+					if (score < self._scores.Get(name)) { return; }
+			}
+		}
 
-    return result;
-  }
+		self._scores.Set(name, score);
+		self.Save();
+	}
+
+	function Load() {
+		if (!PersistentData.FileExists(self._fileName)) {
+			return;
+		}
+
+		PersistentData.Clear();
+		PersistentData.LoadFromFile(self._fileName, false);
+		data = PersistentData.GetProperty("scores", "");
+
+		self._scores = Json.LoadFromString(data);
+	}
+
+	function Save() {
+		PersistentData.Clear();
+		PersistentData.SetProperty("scores", Json.SaveToString(self._scores));
+		PersistentData.SaveToFile(self._fileName, false);
+	}
+
+	function Retrieve() {
+		result = List();
+
+		index = 0;
+		total = 0;
+		names = List();
+		scores = List();
+
+		for (key in self._scores.Keys) {
+			value = self._scores.Get(key);
+			scores.Add(Convert.ToInt(value) * 256 + index);
+			names.Add(key);
+			index += 1;
+		}
+
+		scores.Sort();
+
+		if (self._isAscending) {
+			startIndex = 0;
+			endIndex = scores.Count;
+			step = 1;
+		} else {
+			startIndex = scores.Count - 1;
+			endIndex = -1;
+			step = -1;
+		}
+
+		result = List();
+		index = 1;
+
+		for (i in Range(startIndex, endIndex, step)) {
+			score = Math.Floor(scores.Get(i) / 256);
+			if (self._displayType == "k") {
+				score = Math.Round(score / 1000.0) + "k";
+			} elif (self._displayType == "s") {
+				score = String.FormatFloat(score / 100.0, 2) + "s";
+			} else {
+				score = entry.Get(1);
+			}
+
+			name = names.Get(Math.Mod(scores.Get(i), 256));
+
+			entry = List();
+			entry.Add(name);
+			entry.Add(score);
+			result.Add(entry);
+
+			index += 1;
+		}
+
+		return result;
+	}
 }
 
 class LZW {
@@ -1411,11 +1431,11 @@ class LZW {
 		self._firstIndex = 0;
 		self._secondIndex = 0;
 		self._firstLetter = "0";
-    
+
 		self._dict = Dict();
 		self._charset = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ !#$%&'()*+,-./:;<=>?@[\]^_`{|}~";
-    self._charsetSize = String.Length(self._charset);
-    self.InitDict();
+		self._charsetSize = String.Length(self._charset);
+		self.InitDict();
 
 		self._res = self._dict.Get(self.GetBlock(0));
 		self._p = self._res;
@@ -1441,115 +1461,115 @@ class LZW {
 
 		return res;
 	}
-  
-  function GetCharsetAt(i) {
-    return String.SubstringWithLength(self._charset, i, 1);
-  }
-  
-  function Decompress() {
+
+	function GetCharsetAt(i) {
+		return String.SubstringWithLength(self._charset, i, 1);
+	}
+
+	function Decompress() {
 		for (i in Range(1, String.Length(self._data) / 2, 1)) {
 			c = self.GetBlock(i);
 			if (!self._dict.Contains(c)) {
-        newEntry = self._p + String.SubstringWithLength(self._p, 0, 1);
-        self._dict.Set(self.NextKey(), newEntry);
-        self._res += newEntry;
-        self._p = newEntry;
-      } else {
-        code = self._dict.Get(c);
-        self._res += code;
-        newEntry = self._p + String.SubstringWithLength(code, 0, 1);
-        self._dict.Set(self.NextKey(), newEntry);
-        self._p = code;
-      }
-    }
-    
-    return self._res;
+				newEntry = self._p + String.SubstringWithLength(self._p, 0, 1);
+				self._dict.Set(self.NextKey(), newEntry);
+				self._res += newEntry;
+				self._p = newEntry;
+			} else {
+				code = self._dict.Get(c);
+				self._res += code;
+				newEntry = self._p + String.SubstringWithLength(code, 0, 1);
+				self._dict.Set(self.NextKey(), newEntry);
+				self._p = code;
+			}
+		}
+
+		return self._res;
 	}
-  
-  function InitDict() {
-    for (i in Range(0, self._charsetSize, 1)) {
-      c = self.GetCharsetAt(i);
-      self._dict.Set(self.NextKey(), c);
-    }
-  }
+
+	function InitDict() {
+		for (i in Range(0, self._charsetSize, 1)) {
+			c = self.GetCharsetAt(i);
+			self._dict.Set(self.NextKey(), c);
+		}
+	}
 }
 
 extension MainController {
-  function InitMain(main) {
-    self._main = main;
-  }
-  
-  function SwitchMode(mode) {
-    return self._main.SwitchMode(mode);
-  }
-  
-  function TriggerAction(action) {
-    self._main.OnAction(action);
-  }
-  
-  function OnLoadMap(map) {
-    self._main.OnLoadMap(map);
-  }
+	function InitMain(main) {
+		self._main = main;
+	}
+
+	function SwitchMode(mode) {
+		return self._main.SwitchMode(mode);
+	}
+
+	function TriggerAction(action) {
+		self._main.OnAction(action);
+	}
+
+	function OnLoadMap(map) {
+		self._main.OnLoadMap(map);
+	}
 }
 
 extension MapLibrary {
-  function CreateHubMap(offset) {
-    objects = List();
-    objects.Add(Map.CreateMapObjectRaw("Scene,General/EditorHumanSpawnPoint,5,0,1,1,0,0,Human SpawnPoint,0,0,0,0,0,0,1,1,1,None,Entities,Default,Default|255/255/255/255,Tag|Name:HumanSpawnPoint;"));
-    objects.Add(Map.CreateMapObjectRaw("Scene,Arenas/Arena1,4,0,1,1,1,0,Arena1,0,0,0,0,0,0,1,1,1,Physical,Entities,Default,Default|255/255/255/255,;"));
-    
-    for (obj in objects) {
-      obj.Position = obj.Position + offset;
-    }
-    
-    return MapSubset(objects);
-  }
+	function CreateHubMap(offset) {
+		objects = List();
+		objects.Add(Map.CreateMapObjectRaw("Scene,General/EditorHumanSpawnPoint,5,0,1,1,0,0,Human SpawnPoint,0,0,0,0,0,0,1,1,1,None,Entities,Default,Default|255/255/255/255,Tag|Name:HumanSpawnPoint;"));
+		objects.Add(Map.CreateMapObjectRaw("Scene,Arenas/Arena1,4,0,1,1,1,0,Arena1,0,0,0,0,0,0,1,1,1,Physical,Entities,Default,Default|255/255/255/255,;"));
+
+		for (obj in objects) {
+			obj.Position = obj.Position + offset;
+		}
+
+		return MapSubset(objects);
+	}
 }
 
 extension NetworkUtil {
-  _cache = Dict();
+	_cache = Dict();
 
-  function SetCustomProperty(key, value) {
-    if (self._cache.Contains(key) && self._cache.Get(key) == value) {
-      return;
-    }
+	function SetCustomProperty(key, value) {
+		if (self._cache.Contains(key) && self._cache.Get(key) == value) {
+			return;
+		}
 
-    Network.MyPlayer.SetCustomProperty(key, value);
-    self._cache.Set(key, value);
-  }
+		Network.MyPlayer.SetCustomProperty(key, value);
+		self._cache.Set(key, value);
+	}
 }
 
 extension MapUtil {
-  function SaveToFile(fileName, map) {
-    PersistentData.Clear();
-    
-    t = map.Get("t");
-    PersistentData.SetProperty("t", t);
-    PersistentData.SetProperty("n", map.Get("n"));
-    
-    for (i in Range(0, String.Length(t), 1)) {
-      PersistentData.SetProperty(Convert.ToString(i), map.Get(Convert.ToString(i)));
-    }
-    
-    PersistentData.SaveToFile("test", false);
-    PersistentData.Clear();
-  }
-  
-  function LoadFromFile(fileName) {
-    PersistentData.Clear();
-    PersistentData.LoadFromFile(fileName, false);
-    
-    map = Dict();
-    
-    t = PersistentData.GetProperty("t", "");
-    map.Set("t", t);
-    map.Set("n", PersistentData.GetProperty("n", 0));
-    
-    for (i in Range(0, String.Length(t), 1)) {
-      map.Set(Convert.ToString(i), PersistentData.GetProperty(Convert.ToString(i), ""));
-    }
-    PersistentData.Clear();
-    
-    return map;
-  }
+	function SaveToFile(fileName, map) {
+		PersistentData.Clear();
+
+		t = map.Get("t");
+		PersistentData.SetProperty("t", t);
+		PersistentData.SetProperty("n", map.Get("n"));
+
+		for (i in Range(0, String.Length(t), 1)) {
+			PersistentData.SetProperty(Convert.ToString(i), map.Get(Convert.ToString(i)));
+		}
+
+		PersistentData.SaveToFile("test", false);
+		PersistentData.Clear();
+	}
+
+	function LoadFromFile(fileName) {
+		PersistentData.Clear();
+		PersistentData.LoadFromFile(fileName, false);
+
+		map = Dict();
+
+		t = PersistentData.GetProperty("t", "");
+		map.Set("t", t);
+		map.Set("n", PersistentData.GetProperty("n", 0));
+
+		for (i in Range(0, String.Length(t), 1)) {
+			map.Set(Convert.ToString(i), PersistentData.GetProperty(Convert.ToString(i), ""));
+		}
+		PersistentData.Clear();
+
+		return map;
+	}
 }
