@@ -46,6 +46,7 @@ class Main {
     self.AFK.Activate(self);
     self.MapLoader.Activate(self);
     LeaderboardLogic().Activate(self);
+    CanvasLogic(hubMap).Activate(self);
     
     self._modes.Set("WAVE", StandardLogic(standardMap));
     self._modes.Set("ASO", AsoLogic(asoMap));
@@ -54,7 +55,7 @@ class Main {
     self._modes.Set("AKINA", AkinaLogic(akinaMap));
 
     NetworkUtil.SetCustomProperty("CurrentMode", "");
-    self.SwitchMode("HUB");
+    self.SwitchMode("WAVE");
     self.UpdateMode();
   }
   
@@ -182,7 +183,7 @@ class UILogic {
     text += "!leaderboard" + String.Newline;
 		UI.CreatePopup("WelcomeMenu", "Welcome", 500, 600);
     UI.AddPopupLabel("WelcomeMenu", text);
-    # UI.ShowPopup("WelcomeMenu");
+    UI.ShowPopup("WelcomeMenu");
   }
   
   function AddBind(key, action) {
@@ -998,19 +999,12 @@ class HubLogic {
     self._map = map;
     self._playerSpawner = PlayerSpawner(map);
     self._chair = Map.CreateMapObjectRaw("Scene,None,6969,0,1,0,1,0,GlobalChair,0,0,50,0,0,0,1,1,1,Physical,Entities,Default,Default|255/255/255/255,");
-    self._board = map.FindMapObjectByName("Board");
-    self._canvas = Canvas(self._board);
   }
   
   function Activate(main) {
     main.ListenOnAction.Add(self);
     main.ListenOnSecond.Add(self);
     main.ListenOnCharacterSpawn.Add(self);
-    
-    main.ListenOnTick.Add(self);
-    main.ListenOnFrame.Add(self);
-    main.ListenOnPlayerJoin.Add(self);
-    main.ListenOnNetworkMessage.Add(self);
     
     main.UX.AddBind("Interaction/Function1", "Sit");
     main.UX.AddBind("Interaction/Function2", "Lay");
@@ -1027,21 +1021,11 @@ class HubLogic {
     main.ListenOnSecond.Remove(self);
     main.ListenOnCharacterSpawn.Remove(self);
     
-    main.ListenOnTick.Remove(self);
-    main.ListenOnFrame.Remove(self);
-    main.ListenOnPlayerJoin.Remove(self);
-    main.ListenOnNetworkMessage.Remove(self);
-    
     main.UX.RemoveBind("Interaction/Function1");
     main.UX.RemoveBind("Interaction/Function2");
     main.UX.RemoveBind("Interaction/Function3");
     main.UX.RemoveBind("Interaction/Function4");
   }
-  
-  function OnTick() { self._canvas.OnTick(); }
-  function OnFrame() { self._canvas.OnFrame(); }
-  function OnPlayerJoin(p) { self._canvas.OnPlayerJoin(p); }
-  function OnNetworkMessage(p, m) { self._canvas.OnNetworkMessage(p, m); }
   
   function OnCharacterSpawn(character) {
     if (character.IsMine && character.Type == "Human") {
@@ -1091,15 +1075,15 @@ class HubLogic {
   function CanJoin() { return true; }
 }
 
-class Canvas {
+class CanvasLogic {
   _hold = false;
   _wasHold = false;
   _lines = Dict();
   _curveCache = Dict();
   _lineID = 0;
   
-  function Init(MapObject) {
-    self.MapObject = MapObject;
+  function Init(map) {
+    self.MapObject = map.FindMapObjectByName("Board");
     self._T = self.MapObject.QuaternionRotation * Vector3(1, 0, 0);
     self._B = self.MapObject.QuaternionRotation * Vector3(0, 0, 1);
     self._N = self.MapObject.QuaternionRotation * Vector3(0, 1, 0);
@@ -1110,7 +1094,23 @@ class Canvas {
     self._bound = Vector2(self.MapObject.Scale.X, self.MapObject.Scale.Z);
     self._serializer = Serializer(self._bound);
   }
+
+  function Activate(main) {
+    main.ListenOnTick.Add(self);
+    main.ListenOnFrame.Add(self);
+    main.ListenOnChatInput.Add(self);
+    main.ListenOnPlayerJoin.Add(self);
+    main.ListenOnNetworkMessage.Add(self);
+  }
   
+  function Deactivate(main) {
+    main.ListenOnTick.Remove(self);
+    main.ListenOnFrame.Remove(self);
+    main.ListenOnChatInput.Remove(self);
+    main.ListenOnPlayerJoin.Remove(self);
+    main.ListenOnNetworkMessage.Remove(self);
+  }
+
   function OnTick() {
     mouse = Input.GetMouseAim() - self._base;
     X = Vector3.Dot(mouse, self._T);
@@ -1127,8 +1127,11 @@ class Canvas {
     } elif (self._wasHold) {
       self._lineID += 1;
       path = self._pathCompressor.Snip();
-      body = self._serializer.EncodePath(path);
-      self.SendPath(null, Network.MyPlayer.ID + "_" + self._lineID, body);
+
+      if (path.GetCurves().Count > 0) {
+        body = self._serializer.EncodePath(path);
+        self.SendPath(null, Network.MyPlayer.ID + "_" + self._lineID, body);
+      }
       
       self._preview.PositionCount = 0;
       self._segmentGenerator.Reset();
@@ -1138,11 +1141,9 @@ class Canvas {
   }
   
   function OnPlayerJoin(player) {
-    if (!Network.IsMasterClient) {
-      return;
+    if (Network.IsMasterClient) {
+      self.SyncCache(player);
     }
-    
-    self.SyncCache(player);
   }
   
   function OnFrame() {
@@ -1167,15 +1168,36 @@ class Canvas {
       }
     } elif (data.Get("op") == "CANVAS_delete") {
       id = data.Get("id");
-      self._lines.Get(id).Destroy();
-      self._lines.Remove(id);
+      if (self._lines.Contains(id)) {
+        self._lines.Get(id).Destroy();
+        self._lines.Remove(id);
+      }
       
-      if (Network.IsMasterClient) {
+      if (Network.IsMasterClient && self._curveCache.Contains(id)) {
         self._curveCache.Remove(id);
       }
+    } elif (data.Get("op") == "CANVAS_clear" && sender == Network.MasterClient) {
+      for (line in self._lines.Values) {
+        line.Destroy();
+      }
+      self._lines.Clear();
+    }
+  }
+
+  function OnChatInput(message) {
+    if (Network.IsMasterClient && message == "/canvas_clear") {
+      self.ClearCanvas();
+      return false;
     }
   }
   
+  function ClearCanvas() {
+    self._curveCache.Clear();
+    data = Dict();
+    data.Set("op", "CANVAS_clear");
+    Network.SendMessageAll(Json.SaveToString(data));
+  }
+
   coroutine SyncCache(player) {
     for (key in self._curveCache.Keys) {
       self.SendPath(player, key, self._curveCache.Get(key));
