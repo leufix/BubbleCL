@@ -24,10 +24,10 @@ class Main {
     UI.SetScoreboardProperty("ScoreStatus");
     
     standardMap = MapSubset(Map.FindAllMapObjects());
-    asoMap = standardMap.CreateCopy(Vector3(100000, 0, 0));
-    bombMap = standardMap.CreateCopy(Vector3(0, 0, 100000));
-    hubMap = MapLibrary.CreateHubMap(Vector3(-100000, 0, 0));
-    akinaMap = Vector3(0, 0, -100000);
+    asoMap = standardMap.CreateCopy(Vector3(10000, 0, 0));
+    bombMap = standardMap.CreateCopy(Vector3(0, 0, 10000));
+    hubMap = MapLibrary.CreateHubMap(Vector3(-10000, 0, 0));
+    akinaMap = Vector3(0, 0, -10000);
     
     if (Network.IsMasterClient) {
       MC_MapTransferLogic().Activate(self);
@@ -588,6 +588,8 @@ class StandardLogic {
   }
   
   function OnSecond() {
+    me = Network.MyPlayer.Character;
+    if (me != null) { me.CurrentGas = me.MaxGas; }
     self._playerSpawner.EndlessRespawn();
   }
   
@@ -679,6 +681,7 @@ class AkinaLogic {
   function Activate(main) {
     main.ListenOnTick.Add(self);
     main.ListenOnAction.Add(self);
+    main.ListenOnSecond.Add(self);
     main.ListenOnLoadMap.Add(self);
     main.ListenOnFinishRace.Add(self);
     
@@ -696,10 +699,15 @@ class AkinaLogic {
   function Deactivate(main) {
     main.ListenOnTick.Remove(self);
     main.ListenOnAction.Remove(self);
+    main.ListenOnSecond.Remove(self);
     main.ListenOnLoadMap.Remove(self);
     main.ListenOnFinishRace.Remove(self);
     
     main.UX.RemoveBind("Interaction/Function1", "Retry");
+  }
+  
+  function OnSecond() {
+    self._playerSpawner.EndlessRespawn();
   }
   
   function OnAction(action) {
