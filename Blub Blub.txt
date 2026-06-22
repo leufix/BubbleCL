@@ -9,6 +9,8 @@ class Main {
   ListenOnNetworkMessage = List();
   ListenOnAction = List();
   ListenOnButtonClick = List();
+  ListenOnLoadMap = List();
+  ListenOnFinishRace = List();
   
   _modes = Dict();
   _currentMode = null;
@@ -22,25 +24,33 @@ class Main {
     UI.SetScoreboardProperty("ScoreStatus");
     
     standardMap = MapSubset(Map.FindAllMapObjects());
-    asoMap = standardMap.CreateCopy(Vector3(10000, 0, 0));
-    bombMap = standardMap.CreateCopy(Vector3(0, 0, 10000));
-    hubMap = MapLibrary.CreateHubMap(Vector3(-10000, 0, 0));
+    asoMap = standardMap.CreateCopy(Vector3(100000, 0, 0));
+    bombMap = standardMap.CreateCopy(Vector3(0, 0, 100000));
+    hubMap = MapLibrary.CreateHubMap(Vector3(-100000, 0, 0));
+    akinaMap = Vector3(0, 0, -100000);
     
     if (Network.IsMasterClient) {
+      MC_MapTransferLogic().Activate(self);
       MC_StandardLogic(standardMap).Activate(self);
       MC_BombLogic(bombMap).Activate(self);
       MC_AsoLogic(asoMap).Activate(self);
+      MC_LeaderboardLogic().Activate(self);
     }
     
     self.UX = UILogic();
     self.AFK = AfkLogic();
+    self.MapLoader = MapLoaderLogic();
+    
     self.UX.Activate(self);
     self.AFK.Activate(self);
+    self.MapLoader.Activate(self);
+    LeaderboardLogic().Activate(self);
     
     self._modes.Set("WAVE", StandardLogic(standardMap));
     self._modes.Set("ASO", AsoLogic(asoMap));
     self._modes.Set("BOMB", BombLogic(bombMap));
     self._modes.Set("HUB", HubLogic(hubMap));
+    self._modes.Set("AKINA", AkinaLogic(akinaMap));
 
     NetworkUtil.SetCustomProperty("CurrentMode", "");
     self.SwitchMode("WAVE");
@@ -84,8 +94,16 @@ class Main {
     return true;
   }
   
+  function FinishRace() {
+    for (logic in self.ListenOnFinishRace) { logic.OnFinishRace(); }
+  }
+  
   function OnAction(action) {
     for (logic in self.ListenOnAction) { logic.OnAction(action); }
+  }
+  
+  function OnLoadMap(map) {
+    for (logic in self.ListenOnLoadMap) { logic.OnLoadMap(map); }
   }
   
   function OnButtonClick(button) {
@@ -155,10 +173,11 @@ class UILogic {
     text += "                       <°)))><◦°" + String.Newline;
     text += String.Newline;
     text += "- Commands -" + String.Newline;
-    text += "!hub  |  !wave  |  !aso  |  !bomb" + String.Newline;
+    text += "!hub  |  !wave  |  !aso  |  !bomb  |  !akina" + String.Newline;
+    text += "!leaderboard" + String.Newline;
 		UI.CreatePopup("WelcomeMenu", "Welcome", 500, 600);
     UI.AddPopupLabel("WelcomeMenu", text);
-    UI.ShowPopup("WelcomeMenu");
+    # UI.ShowPopup("WelcomeMenu");
   }
   
   function AddBind(key, action) {
@@ -168,6 +187,7 @@ class UILogic {
   
   function RemoveBind(key) {
     self._keybinds.Remove(key);
+    self.UpdateBindLabel();
   }
   
   function OnNetworkMessage(sender, message) {
@@ -185,8 +205,9 @@ class UILogic {
     elif (message == "!aso") { return MainController.SwitchMode("ASO"); }
     elif (message == "!bomb") { return MainController.SwitchMode("BOMB"); }
     elif (message == "!hub") { return MainController.SwitchMode("HUB"); }
+    elif (message == "!akina") { return MainController.SwitchMode("AKINA"); }
+    elif (message == "!leaderboard") { return MainController.TriggerAction("LeaderboardShow"); }
     elif (message == "!help") { UI.ShowPopup("WelcomeMenu"); }
-    elif (message == "piyan") { self.SayAfter("<color=white>piyan bot: piyan</color>"); }
     elif (String.StartsWith(message, "!roll")) {
       self.SayAfter("<color=white>" + Network.MyPlayer.Name + "</color> rolled for <color=green>" + Random.RandomInt(0, 101) + "</color>.");
     }
@@ -252,7 +273,7 @@ class BombLogic {
   
   function OnEnd(reason) {
     if (Network.MyPlayer.Status == "Alive") {
-      self.KillAfter(3);
+      self.KillAfter(1);
     }
     
     UI.SetLabelForTime("MiddleCenter", "<size=100>" + String.Newline + "</size>" + reason, 3);
@@ -368,17 +389,14 @@ class AsoLogic {
   function Init(map) {
     self._map = map;
     self._playerSpawner = PlayerSpawner(map);
-    self.CreateLeaderboardPopup();
   }
   
   function Activate(main) {
     main.ListenOnCharacterSpawn.Add(self);
     main.ListenOnTick.Add(self);
     main.ListenOnAction.Add(self);
-    main.ListenOnButtonClick.Add(self);
     
     main.UX.AddBind("Interaction/Function1", "Retry");
-    main.UX.AddBind("Interaction/Function2", "Leaderboard");
     
     self.Retry();
   }
@@ -386,33 +404,12 @@ class AsoLogic {
   function Deactivate(main) {
     main.ListenOnCharacterSpawn.Remove(self);
     main.ListenOnTick.Remove(self);
-    main.ListenOnSecond.Remove(self);
     main.ListenOnAction.Remove(self);
-    main.ListenOnButtonClick.Remove(self);
-  }
-  
-  function OnButtonClick(button) {
-    if (button == "ASO_leaderboard100s") {
-      self.LeaderboardRequest("100s");
-    } elif (button == "ASO_leaderboard300s") {
-      self.LeaderboardRequest("300s");
-    } elif (button == "ASO_leaderboard600s") {
-      self.LeaderboardRequest("600s");
-    }
-  }
-  
-  function CreateLeaderboardPopup() {
-    UI.CreatePopup("ASOLeaderboardMenu", "ASO Leaderboard", 300, 400);
-    UI.AddPopupButton("ASOLeaderboardMenu", "ASO_leaderboard100s", "100s");
-    UI.AddPopupButton("ASOLeaderboardMenu", "ASO_leaderboard300s", "300s");
-    UI.AddPopupButton("ASOLeaderboardMenu", "ASO_leaderboard600s", "600s");
   }
   
   function OnAction(action) {
     if (action == "Retry") {
       self.Retry();
-    } elif (action == "Leaderboard") {
-      UI.ShowPopup("ASOLeaderboardMenu");
     }
   }
   
@@ -454,13 +451,6 @@ class AsoLogic {
     NetworkUtil.SetCustomProperty("ScoreStatus", status);
   }
   
-  function LeaderboardRequest(category) {
-    data = Dict();
-    data.Set("op", "ASO_leaderboard");
-    data.Set("category", category);
-    Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
-  }
-  
   function OnSecondTransition(roundTime) {
     if (Math.Mod(roundTime, 15) == 0) {
       displayTime = Math.Ceil(self.GetTime());
@@ -481,7 +471,7 @@ class AsoLogic {
   
   function SubmitScore(roundTime) {
     data = Dict();
-    data.Set("op", "ASO_submit");
+    data.Set("op", "PB_submit");
     data.Set("category", Convert.ToString(roundTime) + "s");
     data.Set("score", Network.MyPlayer.TotalDamage);
     Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
@@ -515,11 +505,9 @@ class MC_AsoLogic {
   AddTitansPerWave = 1;
   
   _wave = 0;
-  _leaderboards = Dict();
   
   function Init(map) {
     self._titanSpawner = TitanSpawner(map);
-    self.InitLeaderboard();
     self.NextWave();
   }
   
@@ -535,21 +523,11 @@ class MC_AsoLogic {
     main.ListenOnCharacterDie.Remove(self);
   }
   
-  function InitLeaderboard() {
-    self._leaderboards.Set("100s", Leaderboard("ASO_100s", false));
-    self._leaderboards.Set("300s", Leaderboard("ASO_300s", false));
-    self._leaderboards.Set("600s", Leaderboard("ASO_600s", false));
-  }
-  
   function OnNetworkMessage(sender, message) {
     data = Json.LoadFromString(message);
     
     if (data.Get("op") == "ASO_restart") {
       self.Restart();
-    } elif (data.Get("op") == "ASO_submit") {
-      self.LeaderboardSubmit(sender.Name, data.Get("category"), data.Get("score"));
-    } elif (data.Get("op") == "ASO_leaderboard") {
-      self.LeaderboardResponse(sender, data.Get("category"));
     }
   }
   
@@ -567,38 +545,6 @@ class MC_AsoLogic {
     if (killer != null) {
       self.UpdateStatus();
     }
-  }
-  
-  function LeaderboardSubmit(name, category, score) {
-    if (self._leaderboards.Contains(category)) {
-      leaderboard = self._leaderboards.Get(category);
-      leaderboard.Submit(name, score);
-    }
-  }
-  
-  function LeaderboardResponse(sender, category) {
-    if (!self._leaderboards.Contains(category)) {
-      return;
-    }
-    
-    leaderboard = self._leaderboards.Get(category);
-    result = leaderboard.Retrieve();
-    
-    text = "<color=#00ccff><size=30>- Leaderboard " + category + " -</size></color>" + String.Newline;
-    
-    index = 1;
-    for (entry in result) {
-      name = entry.Get(0);
-      score = Math.Round(entry.Get(1) / 1000.0);
-      text += index + ". " + name + " - " + score + "k" + String.Newline;
-      index += 1;
-    }
-    
-    data = Dict();
-    data.Set("op", "UI_popup");
-    data.Set("body", text);
-    
-    Network.SendMessage(sender, Json.SaveToString(data));
   }
   
   function Restart() {
@@ -715,6 +661,322 @@ class MC_StandardLogic {
   function NextWave() {
     self._titanSpawner.SpawnTitans(self.TitanCount);
     self._wave += 1;
+  }
+}
+
+class AkinaLogic {
+  _playerSpawner = null;
+  _mapLoaded = false;
+  _startTime = 0;
+  _startBarriers = null;
+  _started = false;
+  _finished = false;
+  
+  function Init(mapOffset) {
+    self._mapOffset = mapOffset;
+  }
+  
+  function Activate(main) {
+    main.ListenOnTick.Add(self);
+    main.ListenOnAction.Add(self);
+    main.ListenOnLoadMap.Add(self);
+    main.ListenOnFinishRace.Add(self);
+    
+    main.UX.AddBind("Interaction/Function1", "Retry");
+    
+    if (self._mapLoaded) {
+      self.Reset();
+    } else {
+      main.MapLoader.Load("Akina");
+    }
+    
+    NetworkUtil.SetCustomProperty("ScoreStatus", "[AKINA]");
+  }
+  
+  function Deactivate(main) {
+    main.ListenOnTick.Remove(self);
+    main.ListenOnAction.Remove(self);
+    main.ListenOnLoadMap.Remove(self);
+    main.ListenOnFinishRace.Remove(self);
+    
+    main.UX.RemoveBind("Interaction/Function1", "Retry");
+  }
+  
+  function OnAction(action) {
+    if (action == "Retry") {
+      self.Reset();
+    }
+  }
+  
+  function OnLoadMap(map) {
+    map.Translate(self._mapOffset);
+    
+    self._playerSpawner = PlayerSpawner(map);
+    self._startBarriers = map.FindMapObjectsByName("Racing Start Barrier Cuboid");
+    
+    self._mapLoaded = true;
+    self.Reset();
+  }
+  
+  function OnFinishRace() {
+    if (self._finished) {
+      return;
+    }
+    
+    finishTime = String.FormatFloat(self.GetRaceTime(), 2);
+    UI.SetLabelForTime("MiddleCenter", "<color=white>" + Network.MyPlayer.Name + "</color> finished in " + finishTime + "s!", 5.0);
+    Game.PrintAll("<color=white>" + Network.MyPlayer.Name + "</color> finished Akina in " + finishTime + "s!");
+    NetworkUtil.SetCustomProperty("ScoreStatus", "[AKINA]" + finishTime + "s");
+    
+    self.SubmitScore();
+    self._finished = true;
+  }
+  
+  function OnTick() {
+    if (!self._mapLoaded) {
+      return;
+    }
+    
+    if (self.GetRaceTime() > 0) {
+      if (!self._started) {
+        for (barrier in self._startBarriers) {
+          barrier.Active = false;
+        }
+        self._started = true;
+      }
+      
+      UI.SetLabel("TopCenter", "Racing Time: " + String.FormatFloat(self.GetRaceTime(), 2));
+    } else {
+      UI.SetLabel("TopCenter", "Race Starts In: " + String.FormatFloat(Math.Abs(self.GetRaceTime()), 2));
+    }
+  }
+  
+  function GetRaceTime() {
+    return Time.GameTime - self._startTime;
+  }
+  
+  function Reset() {
+    for (barrier in self._startBarriers) {
+      barrier.Active = true;
+    }
+    
+    self._playerSpawner.Spawn();
+    self._started = false;
+    self._finished = false;
+    self._startTime = Time.GameTime + 5.0;
+  }
+  
+  function SubmitScore(roundTime) {
+    data = Dict();
+    data.Set("op", "PB_submit");
+    data.Set("category", "Akina");
+    data.Set("score", Math.Round(self.GetRaceTime() * 100));
+    Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
+  }
+  
+  function CanJoin() { return true; }
+}
+
+class MC_MapTransferLogic {
+  _transfer = Dict();
+  
+  function Init() {
+    self.CreateTransfer("Akina");
+  }
+  
+  function Activate(main) {
+    main.ListenOnNetworkMessage.Add(self);
+  }
+  
+  function Deactivate(main) {
+    main.ListenOnNetworkMessage.Remove(self);
+  }
+  
+  function OnNetworkMessage(sender, message) {
+    data = Json.LoadFromString(message);
+    
+    if (data.Get("op") == "MAP_request") {
+      name = data.Get("name");
+      self.Transfer(sender, name);
+    }
+  }
+  
+  function Transfer(player, name) {
+    if (!self._transfer.Contains(name)) {
+      return;
+    }
+    
+    self.TransferAsync(player, name);
+  }
+  
+  function TransferAsync(player, name) {
+    payload = self._transfer.Get(name);
+    
+    totalLength = String.Length(payload);
+    chunkCount = Math.Ceil(totalLength / 10000.0);
+    
+    for (i in Range(0, chunkCount, 1)) {
+      chunk = String.SubstringWithLength(payload, i * 10000, Math.Min(totalLength, 10000));
+      
+      data = Dict();
+      data.Set("op", "MAP_chunk");
+      data.Set("name", name);
+      data.Set("body", chunk);
+      Network.SendMessage(player, Json.SaveToString(data));
+      
+      totalLength -= 10000;
+      wait 0.5;
+    }
+    
+    data = Dict();
+    data.Set("op", "MAP_done");
+    data.Set("name", name);
+    Network.SendMessage(player, Json.SaveToString(data));
+  }
+  
+  function CreateTransfer(name) {
+    fileName = "Map_" + name;
+    
+    if (!PersistentData.FileExists(fileName)) {
+      Game.Print("<color=red>Missing map '" + name + "'.</color>");
+      return;
+    }
+    
+    map = MapUtil.LoadFromFile(fileName);
+    self._transfer.Set(name, Json.SaveToString(map));
+  }
+}
+
+class MapLoaderLogic {
+  _downloads = Dict();
+  
+  function Activate(main) {
+    main.ListenOnNetworkMessage.Add(self);
+  }
+  
+  function Deactivate(main) {
+    main.ListenOnNetworkMessage.Remove(self);
+  }
+  
+  function OnNetworkMessage(sender, message) {
+    if (sender != Network.MasterClient) {
+      return;
+    }
+    
+    data = Json.LoadFromString(message);
+    
+    if (data.Get("op") == "MAP_chunk") {
+      self.SaveChunk(data);
+    } elif (data.Get("op") == "MAP_done") {
+      self.FinishDownload(data);
+    }
+  }
+  
+  function FinishDownload(data) {
+    name = data.Get("name");
+    map = Json.LoadFromString(self._downloads.Get(name));
+    self._downloads.Remove(name):
+    
+    MapUtil.SaveToFile("Map_" + name, map);
+    objects = self.CreateMap(map);
+    
+    MainController.OnLoadMap(MapSubset(objects));
+    
+    Game.Print("Finished downloading map '" + name + "'.");
+  }
+  
+  function SaveChunk(data) {
+    name = data.Get("name");
+    chunk = data.Get("body");
+    self._downloads.Set(name, self._downloads.Get(name, "") + chunk);
+  }
+  
+  function Load(name) {
+    fileName = "Map_" + name;
+    if (PersistentData.FileExists(fileName)) {
+      map = MapUtil.LoadFromFile(fileName);
+      objects = self.CreateMap(map);
+      MainController.OnLoadMap(MapSubset(objects));
+      Game.Print("Loaded '" + name + "' from file.");
+    } else {
+      self.RequestMap(name);
+    }
+  }
+  
+  function CreateMap(map) {
+    t = map.Get("t", "");
+    N = map.Get("n", 0);
+    M = String.Length(t);
+    
+    columns = List();
+    
+    for (i in Range(0, M, 1)) {
+      b = String.SubstringWithLength(t, i, 1);
+      data = map.Get(Convert.ToString(i), "");
+      if (b == "0") {
+        columns.Add(self.DecompressColumnRLE(data));
+      } elif (b == "1") {
+        columns.Add(self.DecompressColumn(data));
+      }
+    }
+    
+    objects = List();
+    
+    for (k in Range(N)) {
+      objects.Add(self.LoadRow(columns, k, M));
+    }
+    
+    return objects;
+  }
+  
+  function RequestMap(name) {
+    data = Dict();
+    data.Set("op", "MAP_request");
+    data.Set("name", name);
+    Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
+  }
+  
+  function LoadRow(columns, k, M) {
+    row = List();
+    for (i in Range(M)) {
+      row.Add(columns.Get(i).Get(k));
+    }
+    
+    c = null;
+    if (row.Get(22) != ";" && row.Get(22) != "") {
+      c = String.Split(row.Get(22), "|").Get(0);
+      row.Set(22, "");
+    }
+    
+    row = String.Join(row, ",");
+    obj = Map.CreateMapObjectRaw(row);
+    
+    if (c != null) {
+      obj.AddComponent(c);
+    }
+    
+    return obj;
+  }
+  
+  function DecompressColumn(data) {
+    lzw = LZW(data);
+    return String.Split(lzw.Decompress(), ",");
+  }
+  
+  function DecompressColumnRLE(data) {
+    lzw = LZW(data);
+    items = String.Split(lzw.Decompress(), ",");
+    
+    column = List();
+    for (i in Range(0, items.Count, 2)) {
+      a = Convert.ToInt(items.Get(i + 0));
+      b = items.Get(i + 1);
+      for (j in Range(0, a, 1)) {
+        column.Add(b);
+      }
+    }
+    
+    return column;
   }
 }
 
@@ -907,6 +1169,12 @@ class MapSubset {
     self._mapObjects = mapObjects;
   }
   
+  function Translate(offset) {
+    for (obj in self._mapObjects) {
+      obj.Position = obj.Position + offset;
+    }
+  }
+  
   function FindMapObjectsByName(name) {
     res = List();
     for (obj in self._mapObjects) {
@@ -931,12 +1199,123 @@ class MapSubset {
   }
 }
 
+class MC_LeaderboardLogic {
+  _leaderboards = Dict();
+  _displayTime = "k";
+  
+  function Init() {
+    self._leaderboards.Set("100s", Leaderboard("ASO_100s", false, "k"));
+    self._leaderboards.Set("300s", Leaderboard("ASO_300s", false, "k"));
+    self._leaderboards.Set("600s", Leaderboard("ASO_600s", false, "k"));
+    self._leaderboards.Set("Akina", Leaderboard("Akina", true, "s"));
+  }
+  
+  function Activate(main) {
+    main.ListenOnNetworkMessage.Add(self);
+  }
+  
+  function Deactivate(main) {
+    main.ListenOnNetworkMessage.Remove(self);
+  }
+  
+  function OnNetworkMessage(sender, message) {
+    data = Json.LoadFromString(message);
+    if (data.Get("op") == "PB_request") {
+      self.LeaderboardResponse(sender, data.Get("category"));
+    } elif (data.Get("op") == "PB_submit") {
+      self.LeaderboardSubmit(sender.Name, data.Get("category"), data.Get("score"));
+    }
+  }
+  
+  function LeaderboardSubmit(name, category, score) {
+    if (self._leaderboards.Contains(category)) {
+      leaderboard = self._leaderboards.Get(category);
+      leaderboard.Submit(name, score);
+    }
+  }
+  
+  function LeaderboardResponse(sender, category) {
+    if (!self._leaderboards.Contains(category)) {
+      return;
+    }
+    
+    leaderboard = self._leaderboards.Get(category);
+    result = leaderboard.Retrieve();
+    
+    text = "<color=#00ccff><size=30>- Leaderboard " + category + " -</size></color>" + String.Newline;
+    
+    index = 1;
+    for (entry in result) {
+      name = entry.Get(0);
+      score = entry.Get(1);
+      text += index + ". " + name + " - " + score + String.Newline;
+      index += 1;
+    }
+    
+    data = Dict();
+    data.Set("op", "UI_popup");
+    data.Set("body", text);
+    
+    Network.SendMessage(sender, Json.SaveToString(data));
+  }
+}
+
+class LeaderboardLogic {
+  function Init() {
+    self.CreateLeaderboardPopup();
+  }
+  
+  function Activate(main) {
+    main.ListenOnButtonClick.Add(self);
+    main.ListenOnAction.Add(self);
+  }
+  
+  function Deactivate(main) {
+    main.ListenOnButtonClick.Remove(self);
+    main.ListenOnAction.Remove(self);
+  }
+  
+  function OnAction(action) {
+    if (action == "LeaderboardShow") {
+      UI.ShowPopup("LeaderboardMenu");
+    }
+  }
+  
+  function OnButtonClick(button) {
+    if (button == "PB_aso100s") {
+      self.LeaderboardRequest("100s");
+    } elif (button == "PB_aso300s") {
+      self.LeaderboardRequest("300s");
+    } elif (button == "PB_aso600s") {
+      self.LeaderboardRequest("600s");
+    } elif (button == "PB_akina") {
+      self.LeaderboardRequest("Akina");
+    }
+  }
+  
+  function LeaderboardRequest(category) {
+    data = Dict();
+    data.Set("op", "PB_request");
+    data.Set("category", category);
+    Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
+  }
+  
+  function CreateLeaderboardPopup() {
+    UI.CreatePopup("LeaderboardMenu", "Leaderboard", 300, 400);
+    UI.AddPopupButton("LeaderboardMenu", "PB_aso100s", "100s");
+    UI.AddPopupButton("LeaderboardMenu", "PB_aso300s", "300s");
+    UI.AddPopupButton("LeaderboardMenu", "PB_aso600s", "600s");
+    UI.AddPopupButton("LeaderboardMenu", "PB_akina", "Akina");
+  }
+}
+
 class Leaderboard {
   _scores = Dict();
   
-  function Init(name, isAscending) {
+  function Init(name, isAscending, displayType) {
     self._isAscending = isAscending;
     self._fileName = "Leaderboard_" + name;
+    self._displayType = displayType;
     self.Load();
   }
   
@@ -1003,6 +1382,14 @@ class Leaderboard {
     
     for (i in Range(startIndex, endIndex, step)) {
       score = Math.Floor(scores.Get(i) / 256);
+      if (self._displayType == "k") {
+        score = Math.Round(score / 1000.0) + "k";
+      } elif (self._displayType == "s") {
+        score = String.FormatFloat(score / 100.0, 2) + "s";
+      } else {
+        score = entry.Get(1);
+      }
+      
       name = names.Get(Math.Mod(scores.Get(i), 256));
       
       entry = List();
@@ -1017,6 +1404,76 @@ class Leaderboard {
   }
 }
 
+class LZW {
+	function Init(data) {
+		self._data = data;
+
+		self._firstIndex = 0;
+		self._secondIndex = 0;
+		self._firstLetter = "0";
+    
+		self._dict = Dict();
+		self._charset = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ !#$%&'()*+,-./:;<=>?@[\]^_`{|}~";
+    self._charsetSize = String.Length(self._charset);
+    self.InitDict();
+
+		self._res = self._dict.Get(self.GetBlock(0));
+		self._p = self._res;
+	}
+
+	function GetBlock(i) {
+		return String.SubstringWithLength(self._data, i * 2, 2);
+	}
+
+	function GetResult() {
+		return self._res;
+	}
+
+	function NextKey() {
+		res = self._firstLetter + self.GetCharsetAt(self._secondIndex);
+
+		self._secondIndex += 1;
+		if (self._secondIndex == self._charsetSize) {
+			self._secondIndex = 0;
+			self._firstIndex += 1;
+			self._firstLetter = self.GetCharsetAt(self._firstIndex);
+		}
+
+		return res;
+	}
+  
+  function GetCharsetAt(i) {
+    return String.SubstringWithLength(self._charset, i, 1);
+  }
+  
+  function Decompress() {
+		for (i in Range(1, String.Length(self._data) / 2, 1)) {
+			c = self.GetBlock(i);
+			if (!self._dict.Contains(c)) {
+        newEntry = self._p + String.SubstringWithLength(self._p, 0, 1);
+        self._dict.Set(self.NextKey(), newEntry);
+        self._res += newEntry;
+        self._p = newEntry;
+      } else {
+        code = self._dict.Get(c);
+        self._res += code;
+        newEntry = self._p + String.SubstringWithLength(code, 0, 1);
+        self._dict.Set(self.NextKey(), newEntry);
+        self._p = code;
+      }
+    }
+    
+    return self._res;
+	}
+  
+  function InitDict() {
+    for (i in Range(0, self._charsetSize, 1)) {
+      c = self.GetCharsetAt(i);
+      self._dict.Set(self.NextKey(), c);
+    }
+  }
+}
+
 extension MainController {
   function InitMain(main) {
     self._main = main;
@@ -1028,6 +1485,10 @@ extension MainController {
   
   function TriggerAction(action) {
     self._main.OnAction(action);
+  }
+  
+  function OnLoadMap(map) {
+    self._main.OnLoadMap(map);
   }
 }
 
@@ -1055,5 +1516,40 @@ extension NetworkUtil {
 
     Network.MyPlayer.SetCustomProperty(key, value);
     self._cache.Set(key, value);
+  }
+}
+
+extension MapUtil {
+  function SaveToFile(fileName, map) {
+    PersistentData.Clear();
+    
+    t = map.Get("t");
+    PersistentData.SetProperty("t", t);
+    PersistentData.SetProperty("n", map.Get("n"));
+    
+    for (i in Range(0, String.Length(t), 1)) {
+      PersistentData.SetProperty(Convert.ToString(i), map.Get(Convert.ToString(i)));
+    }
+    
+    PersistentData.SaveToFile("test", false);
+    PersistentData.Clear();
+  }
+  
+  function LoadFromFile(fileName) {
+    PersistentData.Clear();
+    PersistentData.LoadFromFile(fileName, false);
+    
+    map = Dict();
+    
+    t = PersistentData.GetProperty("t", "");
+    map.Set("t", t);
+    map.Set("n", PersistentData.GetProperty("n", 0));
+    
+    for (i in Range(0, String.Length(t), 1)) {
+      map.Set(Convert.ToString(i), PersistentData.GetProperty(Convert.ToString(i), ""));
+    }
+    PersistentData.Clear();
+    
+    return map;
   }
 }
