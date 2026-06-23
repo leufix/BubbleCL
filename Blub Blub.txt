@@ -1081,6 +1081,192 @@ class HubLogic {
 		function CanJoin() { return true; }
 }
 
+class CanvasLogic {
+  _hold = false;
+  _wasHold = false;
+  _lines = Dict();
+  _curveCache = Dict();
+  _lineID = 0;
+  
+  function Init(map) {
+    self.MapObject = map.FindMapObjectByName("Board");
+    self._T = self.MapObject.QuaternionRotation * Vector3(1, 0, 0);
+    self._B = self.MapObject.QuaternionRotation * Vector3(0, 0, 1);
+    self._N = self.MapObject.QuaternionRotation * Vector3(0, 1, 0);
+    self._base = self.MapObject.Position - (self._T * self.MapObject.Scale.X + self._B * self.MapObject.Scale.Z) * 0.5;
+    self._pathCompressor = PathCompressor();
+    self._segmentGenerator = SegmentGenerator(self.MapObject.Scale.Z * 0.005, self);
+    self._preview = self.CreateLine(Color(0, 0, 0));
+    self._bound = Vector2(self.MapObject.Scale.X, self.MapObject.Scale.Z);
+    self._serializer = Serializer(self._bound);
+  }
+
+  function Activate(main) {
+    main.ListenOnTick.Add(self);
+    main.ListenOnFrame.Add(self);
+    main.ListenOnChatInput.Add(self);
+    main.ListenOnPlayerJoin.Add(self);
+    main.ListenOnNetworkMessage.Add(self);
+  }
+  
+  function Deactivate(main) {
+    main.ListenOnTick.Remove(self);
+    main.ListenOnFrame.Remove(self);
+    main.ListenOnChatInput.Remove(self);
+    main.ListenOnPlayerJoin.Remove(self);
+    main.ListenOnNetworkMessage.Remove(self);
+  }
+
+  function OnTick() {
+    mouse = Input.GetMouseAim() - self._base;
+    X = Vector3.Dot(mouse, self._T);
+    Y = Vector3.Dot(mouse, self._B);
+    Z = Vector3.Dot(mouse, self._N);
+    
+    if (X < 0 || Y < 0 || X > self.MapObject.Scale.X || Y > self.MapObject.Scale.Z || Z < -0.1 || Z > 0.1) {
+      return;
+    }
+    
+    if (self._hold) {
+      self._segmentGenerator.AddPoint(Vector2(mouse.X, mouse.Y));
+      self._wasHold = true;
+    } elif (self._wasHold) {
+      self._lineID += 1;
+      path = self._pathCompressor.Snip();
+
+      if (path.GetCurves().Count > 0) {
+        body = self._serializer.EncodePath(path);
+        self.SendPath(null, Network.MyPlayer.ID + "_" + self._lineID, body);
+      }
+      
+      self._preview.PositionCount = 0;
+      self._segmentGenerator.Reset();
+      
+      self._wasHold = false;
+    }
+  }
+  
+  function OnPlayerJoin(player) {
+    if (Network.IsMasterClient) {
+      self.SyncCache(player);
+    }
+  }
+  
+  function OnFrame() {
+    self._hold = Input.GetKeyHold("Human/AttackDefault");
+    if (Input.GetKeyDown("Human/AttackSpecial")) {
+      self.DeleteLine(self._lineID);
+    }
+  }
+  
+  function OnNetworkMessage(sender, message) {
+    data = Json.LoadFromString(message);
+    
+    if (data.Get("op") == "CANVAS_draw") {
+      id = data.Get("id");
+      body = data.Get("body");
+      path = self._serializer.DecodePath(body);
+      line = self.DrawPath(path);
+      self._lines.Set(id, line);
+      
+      if (Network.IsMasterClient) {
+        self._curveCache.Set(id, body);
+      }
+    } elif (data.Get("op") == "CANVAS_delete") {
+      id = data.Get("id");
+      if (self._lines.Contains(id)) {
+        self._lines.Get(id).Destroy();
+        self._lines.Remove(id);
+      }
+      
+      if (Network.IsMasterClient && self._curveCache.Contains(id)) {
+        self._curveCache.Remove(id);
+      }
+    } elif (data.Get("op") == "CANVAS_clear" && sender == Network.MasterClient) {
+      for (line in self._lines.Values) {
+        line.Destroy();
+      }
+      self._lines.Clear();
+    }
+  }
+
+  function OnChatInput(message) {
+    if (Network.IsMasterClient && message == "/canvas_clear") {
+      self.ClearCanvas();
+      return false;
+    }
+  }
+  
+  function ClearCanvas() {
+    self._curveCache.Clear();
+    data = Dict();
+    data.Set("op", "CANVAS_clear");
+    Network.SendMessageAll(Json.SaveToString(data));
+  }
+
+  coroutine SyncCache(player) {
+    for (key in self._curveCache.Keys) {
+      self.SendPath(player, key, self._curveCache.Get(key));
+      wait 0.25;
+    }
+  }
+  
+  function SendPath(player, id, body) {
+    data = Dict();
+    data.Set("op", "CANVAS_draw");
+    data.Set("id", id);
+    data.Set("body", body);
+    
+    if (player == null) {
+      Network.SendMessageAll(Json.SaveToString(data));
+    } else {
+      Network.SendMessage(player, Json.SaveToString(data));
+    }
+  }
+  
+  function DeleteLine(id) {
+    data = Dict();
+    data.Set("op", "CANVAS_delete");
+    data.Set("id", Network.MyPlayer.ID + "_" + self._lineID);
+    Network.SendMessageAll(Json.SaveToString(data));
+    self._lineID -= 1;
+  }
+  
+  function DrawPath(path) {
+    line = self.CreateLine(Color(0, 0, 0));
+    for (curve in path.GetCurves()) {
+      offset = line.PositionCount;
+      line.PositionCount += 11;
+      for (i in Range(0, 11, 1)) {
+        t = i / 10.0;
+        p = curve.Sample(t);
+        line.SetPosition(offset + i, self.ToWorldSpace(p));
+      }
+    }
+    return line;
+  }
+  
+  function OnAddSegment(point) {
+    self._pathCompressor.OnAddSegment(point);
+    self._preview.PositionCount += 1;
+    self._preview.SetPosition(self._preview.PositionCount - 1, self.ToWorldSpace(point));
+  }
+  
+  function CreateLine(color) {
+    line = LineRenderer.CreateLineRenderer();
+    line.Enabled = true;
+    line.LineColor = color;
+    line.PositionCount = 0;
+    line.StartWidth = 0.05;
+    line.EndWidth = 0.05;
+    return line;
+  }
+  
+  function ToWorldSpace(p) {
+    return self._base + p.X * self._T + p.Y * self._B - 0.1 * self._N;
+  }
+}
+
 class AfkLogic {
 	AfkLimit = 30.0;
 	_afkTimer = 30.0;
@@ -1493,6 +1679,329 @@ class LZW {
 		}
 	}
 }
+
+class PathCompressor {
+  MinSampleCount = 10;
+  MaxSampleCount = 50;
+  MinCorrelation = 0.95;
+  MaxCosAngle = 0.8;
+  
+  _prevPoint = null;
+  _prevSample = null;
+  _pointBuffer = List();
+  _sampleBuffer = List();
+  _pearson = PearsonCorrelation();
+  _curves = List();
+  
+  function FlushBuffer() {
+    self._pearson.Reset();
+    self._sampleBuffer.Clear();
+    self._pointBuffer.Clear();
+    self._prevSample = null;
+  }
+  
+  function OnAddSegment(point) {
+    if (self._prevPoint == null) {
+      self._prevPoint = point;
+    } else {
+      delta = point - self._prevPoint;
+      self.OnSample(delta);
+      self._pointBuffer.Add(point);
+      self._prevPoint = point;
+    }
+  }
+  
+  function Snip() {
+    if (self._pointBuffer.Count > 2) {
+      curve = CurveUtil.FitBezier(self._pointBuffer);
+      self._curves.Add(curve);
+    }
+    
+    curves = self._curves;
+    self._curves = List();
+    self.FlushBuffer();
+    self._prevPoint = null;
+    
+    return BezierPath(curves);
+  }
+  
+  function OnSample(sample) {
+    self._pearson.AddSample(sample);
+    
+    cosAngle = 1.0;
+    if (self._prevSample != null) {
+      cosAngle = Vector2.Dot(sample.Normalized, self._prevSample.Normalized);
+    }
+
+    r = self._pearson.GetCorrelation();
+    shouldSplit = Math.Abs(r) < self.MinCorrelation || cosAngle < self.MaxCosAngle || self._sampleBuffer.Count > self.MaxSampleCount;
+    
+    if (shouldSplit) {
+      curve = CurveUtil.FitBezier(self._pointBuffer);
+      self._curves.Add(curve);
+      self.FlushBuffer();
+    } else {
+      self._prevSample = sample;
+    }
+  }
+}
+
+extension CurveUtil {
+  _pearson = PearsonCorrelation();
+  
+  function FitBezier(points) {
+    if (points.Count < 5) {
+      A = points.Get(0);
+      C = points.Get(points.Count - 1);
+      B = (A + C) * 0.5;
+      return BezierCurve(A, B, C);
+    }
+    
+    self._pearson.Reset();
+    
+    n = Convert.ToFloat(points.Count - 1);
+    for (i in Range(1, points.Count, 1)) {
+      sample = (points.Get(i) - points.Get(i - 1)) * n;
+      self._pearson.AddSample(sample);
+    }
+
+    sx = self._pearson.GetX();
+    sy = self._pearson.GetY();
+    sxx = self._pearson.GetXX();
+    syy = self._pearson.GetYY();
+    sxy = self._pearson.GetXY();
+    cov = sxy / n - sx * sy / n / n;
+    
+    sigmay2 = Math.Max(syy / n - sy * sy / n / n, 0.001);
+    b1 = cov / sigmay2;
+    b0 = (sy - sx * b1) / n;
+
+    sigmax = Math.Sqrt(Math.Max(sxx / n - sx * sx / n / n, 0.001));
+    x0 = sx / n - 2 * sigmax;
+    x1 = sx / n + 2 * sigmax;
+
+    p0 = Vector2(x0, b0 + x0 * b1);
+    p1 = Vector2(x1, b0 + x1 * b1);
+    
+    sample1 = points.Get(1) - points.Get(0);
+    sample2 = points.Get(points.Count - 1) - points.Get(points.Count - 2);
+    sampleDelta = sample2 - sample1;
+    flipAnchor = sampleDelta.X < 0;
+    
+    if (flipAnchor) {
+      tmp = p0;
+      p0 = p1;
+      p1 = tmp;
+    }
+
+    A = points.Get(0);
+    C = points.Get(n);
+    B = (p0 + A * 2.0) * 0.5;
+
+    return BezierCurve(A, B, C);
+  }
+}
+
+class BezierPath {
+  function Init(curves) {
+    self._curves = curves;
+  }
+  
+  function GetCurves() {
+    return self._curves;
+  }
+}
+
+class BezierCurve {
+  function Init(A, B, C) {
+    self.A = A;
+    self.B = B;
+    self.C = C;
+  }
+
+  function Sample(t) {
+    const a = (1.0 - t) * self.A + t * self.B;
+    const b = (1.0 - t) * self.B + t * self.C;
+    return (1.0 - t) * a + t * b;
+  }
+}
+
+class PearsonCorrelation {
+  function Init() {
+    self.Reset();
+  }
+
+  function Reset() {
+    self._sx = 0.0;
+    self._sy = 0.0;
+    self._sxx = 0.0;
+    self._syy = 0.0;
+    self._sxy = 0.0;
+    self._sampleCount = 0;
+  }
+
+  function AddSample(sample) {
+    self._sx += sample.X;
+    self._sy += sample.Y;
+    self._sxx += sample.X * sample.X;
+    self._syy += sample.Y * sample.Y;
+    self._sxy += sample.X * sample.Y;
+    self._sampleCount += 1;
+  }
+  
+  function GetX() { return self._sx; }
+  function GetY() { return self._sy; }
+  function GetXX() { return self._sxx; }
+  function GetYY() { return self._syy; }
+  function GetXY() { return self._sxy; }
+  
+  function GetSigmaX() {
+    n = self._sampleCount;
+    return Math.Sqrt(self._sxx / n - self._sx * self._sx / n / n);
+  }
+  
+  function GetSigmaY() {
+    n = self._sampleCount;
+    return Math.Sqrt(self._syy / n - self._sy * self._sy / n / n);
+  }
+  
+  function GetCorrelation() {
+    n = self._sampleCount;
+    cov = self._sxy / n - self._sx * self._sy / n / n;
+    sigmax = self.GetSigmaX();
+    sigmay = self.GetSigmaY();
+    return cov / sigmax / sigmay;
+  }
+}
+
+class SegmentGenerator {
+  _prevPoint = null;
+  _totalDist = 0.0;
+  _segmentConsumer = null;
+
+  function Init(segmentLength, segmentConsumer) {
+    self._segmentLength = segmentLength;
+    self._segmentConsumer = segmentConsumer;
+  }
+
+  function Reset() {
+    self._prevPoint = null;
+    self._totalDist = 0.0;
+  }
+
+  function AddPoint(point) {
+    if (self._prevPoint == null) {
+      self._prevPoint = point;
+      return;
+    }
+
+    delta = point - self._prevPoint;
+    dist = delta.Magnitude;
+
+    tAccum = Math.Ceil(self._totalDist / self._segmentLength) * self._segmentLength;
+    
+    while (tAccum < self._totalDist + dist) {
+      let t = (tAccum - self._totalDist) / dist;
+      lerpPoint = self._prevPoint + (point - self._prevPoint) * t;
+      self._segmentConsumer.OnAddSegment(lerpPoint);
+      tAccum += self._segmentLength;
+    }
+
+    self._totalDist += dist;
+    self._prevPoint = point;
+  }
+}
+
+class Serializer {
+  _count = 0;
+  _charset = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ !#$%&'()*+,-./:;<=>?@[\]^_`{|}~";
+  
+  function Init(bound) {
+    self._bound = bound;
+    self._charsetDict = Dict();
+    self._charsetSize = String.Length(self._charset);
+    self._rangeBound = Convert.ToFloat(self._charsetSize * self._charsetSize);
+    
+    for (i in Range(0, self._charsetSize, 1)) {
+      self._charsetDict.Set(String.SubstringWithLength(self._charset, i, 1), i);
+    }
+  }
+  
+  function DecodePath(message) {
+    messageLength = String.Length(message);
+    
+    A = self.DecodeVector2(String.SubstringWithLength(message, 0, 4));
+    
+    curves = List();
+    
+    for (i in Range(4, messageLength, 8)) {
+      B = self.DecodeVector2(String.SubstringWithLength(message, i, 4));
+      C = self.DecodeVector2(String.SubstringWithLength(message, i + 4, 4));
+      
+      curves.Add(BezierCurve(A, B, C));
+      
+      A = C;
+    }
+    
+    return BezierPath(curves);
+  }
+  
+  function DecodeVector2(v) {
+    a = self.DecodeRange(String.SubstringWithLength(v, 0, 2)) * self._bound.X;
+    b = self.DecodeRange(String.SubstringWithLength(v, 2, 2)) * self._bound.Y;
+    return Vector2(a, b);
+  }
+  
+  function DecodeRange(v) {
+    return self.DecodeInt(v) / self._rangeBound;
+  }
+  
+  function DecodeInt(v) {
+    x = String.SubstringWithLength(v, 0, 1);
+    y = String.SubstringWithLength(v, 1, 1);
+    a = self.CharsetTo(x);
+    b = self.CharsetTo(y);
+    return a * self._charsetSize + b;
+  }
+  
+  function EncodePath(path) {
+    result = "";
+    curves = path.GetCurves();
+    
+    lastPoint = curves.Get(0).A;
+    result += self.EncodeVector2(lastPoint);
+    
+    for (curve in curves) {
+      result += self.EncodeVector2(curve.B);
+      result += self.EncodeVector2(curve.C);
+    }
+    
+    return result;
+  }
+  
+  function EncodeVector2(v) {
+    return self.EncodeRange(v.X / self._bound.X) + self.EncodeRange(v.Y / self._bound.Y);
+  }
+  
+  function EncodeRange(v) {
+    return self.EncodeInt(v * self._rangeBound);
+  }
+  
+  function EncodeInt(v) {
+    a = self.CharsetAt(Math.Mod(Math.Floor(v / self._charsetSize), self._charsetSize));
+    b = self.CharsetAt(Math.Mod(v, self._charsetSize));
+    return a + b;
+  }
+  
+  function CharsetAt(i) {
+    return String.SubstringWithLength(self._charset, i, 1);
+  }
+  
+  function CharsetTo(c) {
+    return self._charsetDict.Get(c);
+  }
+}
+
 
 extension MainController {
 	function InitMain(main) {
