@@ -22,7 +22,6 @@ class Main {
 	}
 
 	function OnGameStart() {
-		NetworkUtil.SetCustomProperty("bombround", 1);
 		UI.SetScoreboardProperty("ScoreStatus");
 
 		standardMap = MapSubset(Map.FindAllMapObjects());
@@ -334,6 +333,7 @@ class BombLogic {
 class MC_BombLogic {
 	_end = false;
 	_bombRound = 1;
+	NetworkUtil.SetCustomProperty("BOMB_round", 1);
 
 	function Init(map) { }
 
