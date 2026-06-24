@@ -257,7 +257,7 @@ class BombLogic {
 		main.ListenOnNetworkMessage.Add(self);
 		main.ListenOnCharacterSpawn.Add(self);
 		main.ListenOnTick.Add(self);
-		currentBombRound = Network.MasterClient.GetCustomProperty("bombround");
+		currentBombRound = Network.MasterClient.GetCustomProperty("BOMB_round");
 		if (self._lastBombRound != currentBombRound){
 			self._playerSpawner.Spawn();
 			self._lastBombRound = currentBombRound;
@@ -271,7 +271,7 @@ class BombLogic {
 	}
 
 	function Deactivate(main) {
-		currentBombRound = Network.MasterClient.GetCustomProperty("bombround");
+		currentBombRound = Network.MasterClient.GetCustomProperty("BOMB_round");
 		self._lastBombRound = currentBombRound;
 		main.ListenOnNetworkMessage.Remove(self);
 		main.ListenOnCharacterSpawn.Remove(self);
@@ -333,9 +333,10 @@ class BombLogic {
 class MC_BombLogic {
 	_end = false;
 	_bombRound = 1;
-	NetworkUtil.SetCustomProperty("BOMB_round", 1);
 
-	function Init(map) { }
+	function Init(map) {
+		NetworkUtil.SetCustomProperty("BOMB_round", 1);
+	 }
 
 	function Activate(main) {
 		main.ListenOnSecond.Add(self);
@@ -390,8 +391,7 @@ class MC_BombLogic {
 
 			self._end = true;
 			self._bombRound += 1;
-			__bombRound = self._bombRound;
-			NetworkUtil.SetCustomProperty("bombround", __bombRound);
+			NetworkUtil.SetCustomProperty("BOMB_round", self._bombRound);
 			self.Restart(winner);
 		}
 	}
@@ -403,7 +403,6 @@ class MC_BombLogic {
 		data.Set("op", "BOMB_start");
 		Network.SendMessageAll(Json.SaveToString(data));
 		self._end = false;
-		self._bombRound += 1;
 	}
 }
 
