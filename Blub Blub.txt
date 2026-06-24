@@ -11,6 +11,7 @@ class Main {
 	ListenOnButtonClick = List();
 	ListenOnLoadMap = List();
 	ListenOnFinishRace = List();
+	ListenOnPlayerJoin = List();
 
 	_modes = Dict();
 	_currentMode = null;
@@ -25,10 +26,10 @@ class Main {
 		UI.SetScoreboardProperty("ScoreStatus");
 
 		standardMap = MapSubset(Map.FindAllMapObjects());
-		asoMap = standardMap.CreateCopy(Vector3(100000, 0, 0));
-		bombMap = standardMap.CreateCopy(Vector3(0, 0, 100000));
-		hubMap = MapLibrary.CreateHubMap(Vector3(-100000, 0, 0));
-		akinaMap = Vector3(0, 0, -100000);
+		asoMap = standardMap.CreateCopy(Vector3(10000, 0, 0));
+		bombMap = standardMap.CreateCopy(Vector3(0, 0, 10000));
+		hubMap = MapLibrary.CreateHubMap(Vector3(-10000, 0, 0));
+		akinaMap = Vector3(0, 0, -10000);
 
 		if (Network.IsMasterClient) {
 			MC_MapTransferLogic().Activate(self);
@@ -46,6 +47,7 @@ class Main {
 		self.AFK.Activate(self);
 		self.MapLoader.Activate(self);
 		LeaderboardLogic().Activate(self);
+		CanvasLogic(hubMap).Activate(self);
 
 		self._modes.Set("WAVE", StandardLogic(standardMap));
 		self._modes.Set("ASO", AsoLogic(asoMap));
@@ -90,54 +92,58 @@ class Main {
 
 	function OnChatInput(message) {
 		for (logic in self.ListenOnChatInput) {
-				if (logic.OnChatInput(message) == false) { return false; }
+			if (logic.OnChatInput(message) == false) { return false; }
 		}
 		return true;
 	}
 
+	function OnPlayerJoin(player) {
+		for (logic in self.ListenOnPlayerJoin) { logic.OnPlayerJoin(player); }
+	}
+
 	function FinishRace() {
-			for (logic in self.ListenOnFinishRace) { logic.OnFinishRace(); }
+		for (logic in self.ListenOnFinishRace) { logic.OnFinishRace(); }
 	}
 
 	function OnAction(action) {
-			for (logic in self.ListenOnAction) { logic.OnAction(action); }
+		for (logic in self.ListenOnAction) { logic.OnAction(action); }
 	}
 
 	function OnLoadMap(map) {
-			for (logic in self.ListenOnLoadMap) { logic.OnLoadMap(map); }
+		for (logic in self.ListenOnLoadMap) { logic.OnLoadMap(map); }
 	}
 
 	function OnButtonClick(button) {
-			for (logic in self.ListenOnButtonClick) { logic.OnButtonClick(button); }
+		for (logic in self.ListenOnButtonClick) { logic.OnButtonClick(button); }
 	}
 
 	function OnTick() {
-			for (logic in self.ListenOnTick) { logic.OnTick(); }
+		for (logic in self.ListenOnTick) { logic.OnTick(); }
 	}
 
 	function OnSecond() {
-			for (logic in self.ListenOnSecond) { logic.OnSecond(); }
+		for (logic in self.ListenOnSecond) { logic.OnSecond(); }
 		self.UpdateMode();
 	}
 
 	function OnCharacterSpawn(character) {
-			for (logic in self.ListenOnCharacterSpawn) { logic.OnCharacterSpawn(character); }
+		for (logic in self.ListenOnCharacterSpawn) { logic.OnCharacterSpawn(character); }
 	}
 
 	function OnCharacterDie(victim, killer, killerName) {
-			for (logic in self.ListenOnCharacterDie) { logic.OnCharacterDie(victim, killer, killerName); }
+		for (logic in self.ListenOnCharacterDie) { logic.OnCharacterDie(victim, killer, killerName); }
 	}
 
 	function OnCharacterDamaged(victim, killer, killerName, damage) {
-			for (logic in self.ListenOnCharacterDamaged) { logic.OnCharacterDamaged(victim, killer, killerName, damage); }
+		for (logic in self.ListenOnCharacterDamaged) { logic.OnCharacterDamaged(victim, killer, killerName, damage); }
 	}
 
 	function OnNetworkMessage(sender, message) {
-			for (logic in self.ListenOnNetworkMessage) { logic.OnNetworkMessage(sender, message); }
+		for (logic in self.ListenOnNetworkMessage) { logic.OnNetworkMessage(sender, message); }
 	}
 
 	function OnFrame() {
-			for (logic in self.ListenOnFrame) { logic.OnFrame(); }
+		for (logic in self.ListenOnFrame) { logic.OnFrame(); }
 	}
 }
 
@@ -178,7 +184,7 @@ class UILogic {
 		text += "!leaderboard" + String.Newline;
 		UI.CreatePopup("WelcomeMenu", "Welcome", 500, 600);
 		UI.AddPopupLabel("WelcomeMenu", text);
-	# UI.ShowPopup("WelcomeMenu");
+		UI.ShowPopup("WelcomeMenu");
 	}
 
 	function AddBind(key, action) {
@@ -202,13 +208,13 @@ class UILogic {
 	}
 
 	function OnChatInput(message) {
-			if (message == "!wave") { return MainController.SwitchMode("WAVE"); }
-			elif (message == "!aso") { return MainController.SwitchMode("ASO"); }
-			elif (message == "!bomb") { return MainController.SwitchMode("BOMB"); }
-			elif (message == "!hub") { return MainController.SwitchMode("HUB"); }
-			elif (message == "!akina") { return MainController.SwitchMode("AKINA"); }
-			elif (message == "!leaderboard") { return MainController.TriggerAction("LeaderboardShow"); }
-			elif (message == "!help") { UI.ShowPopup("WelcomeMenu"); }
+		if (message == "!wave") { return MainController.SwitchMode("WAVE"); }
+		elif (message == "!aso") { return MainController.SwitchMode("ASO"); }
+		elif (message == "!bomb") { return MainController.SwitchMode("BOMB"); }
+		elif (message == "!hub") { return MainController.SwitchMode("HUB"); }
+		elif (message == "!akina") { return MainController.SwitchMode("AKINA"); }
+		elif (message == "!leaderboard") { return MainController.TriggerAction("LeaderboardShow"); }
+		elif (message == "!help") { UI.ShowPopup("WelcomeMenu"); }
 		elif (String.StartsWith(message, "!roll")) {
 			self.SayAfter("<color=white>" + Network.MyPlayer.Name + "</color> rolled for <color=green>" + Random.RandomInt(0, 101) + "</color>.");
 		}
@@ -322,7 +328,7 @@ class BombLogic {
 		}
 	}
 
-		function CanJoin() { return true; }
+	function CanJoin() { return true; }
 }
 
 class MC_BombLogic {
@@ -608,6 +614,8 @@ class StandardLogic {
 	}
 
 	function OnSecond() {
+		me = Network.MyPlayer.Character;
+		if (me != null) { me.CurrentGas = me.MaxGas; }
 		self._playerSpawner.EndlessRespawn();
 	}
 
@@ -635,7 +643,7 @@ class StandardLogic {
 		}
 	}
 
-		function CanJoin() { return true; }
+	function CanJoin() { return true; }
 }
 
 class MC_StandardLogic {
@@ -699,6 +707,7 @@ class AkinaLogic {
 	function Activate(main) {
 		main.ListenOnTick.Add(self);
 		main.ListenOnAction.Add(self);
+		main.ListenOnSecond.Add(self);
 		main.ListenOnLoadMap.Add(self);
 		main.ListenOnFinishRace.Add(self);
 
@@ -716,10 +725,15 @@ class AkinaLogic {
 	function Deactivate(main) {
 		main.ListenOnTick.Remove(self);
 		main.ListenOnAction.Remove(self);
+		main.ListenOnSecond.Remove(self);
 		main.ListenOnLoadMap.Remove(self);
 		main.ListenOnFinishRace.Remove(self);
 
 		main.UX.RemoveBind("Interaction/Function1", "Retry");
+	}
+
+	function OnSecond() {
+		self._playerSpawner.EndlessRespawn();
 	}
 
 	function OnAction(action) {
@@ -794,7 +808,7 @@ class AkinaLogic {
 		Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
 	}
 
-		function CanJoin() { return true; }
+	function CanJoin() { return true; }
 }
 
 class MC_MapTransferLogic {
@@ -1078,193 +1092,196 @@ class HubLogic {
 		}
 	}
 
-		function CanJoin() { return true; }
+	function CanJoin() { return true; }
 }
 
 class CanvasLogic {
-  _hold = false;
-  _wasHold = false;
-  _lines = Dict();
-  _curveCache = Dict();
-  _lineID = 0;
-  
-  function Init(map) {
-    self.MapObject = map.FindMapObjectByName("Board");
-    self._T = self.MapObject.QuaternionRotation * Vector3(1, 0, 0);
-    self._B = self.MapObject.QuaternionRotation * Vector3(0, 0, 1);
-    self._N = self.MapObject.QuaternionRotation * Vector3(0, 1, 0);
-    self._base = self.MapObject.Position - (self._T * self.MapObject.Scale.X + self._B * self.MapObject.Scale.Z) * 0.5;
-    self._pathCompressor = PathCompressor();
-    self._segmentGenerator = SegmentGenerator(self.MapObject.Scale.Z * 0.005, self);
-    self._preview = self.CreateLine(Color(0, 0, 0));
-    self._bound = Vector2(self.MapObject.Scale.X, self.MapObject.Scale.Z);
-    self._serializer = Serializer(self._bound);
-  }
+	_hold = false;
+	_wasHold = false;
+	_lines = Dict();
+	_curveCache = Dict();
+	_lineID = 0;
 
-  function Activate(main) {
-    main.ListenOnTick.Add(self);
-    main.ListenOnFrame.Add(self);
-    main.ListenOnChatInput.Add(self);
-    main.ListenOnPlayerJoin.Add(self);
-    main.ListenOnNetworkMessage.Add(self);
-  }
-  
-  function Deactivate(main) {
-    main.ListenOnTick.Remove(self);
-    main.ListenOnFrame.Remove(self);
-    main.ListenOnChatInput.Remove(self);
-    main.ListenOnPlayerJoin.Remove(self);
-    main.ListenOnNetworkMessage.Remove(self);
-  }
+	function Init(map) {
+		self.MapObject = map.FindMapObjectByName("Board");
+		self._T = self.MapObject.QuaternionRotation * Vector3(1, 0, 0);
+		self._B = self.MapObject.QuaternionRotation * Vector3(0, 0, 1);
+		self._N = self.MapObject.QuaternionRotation * Vector3(0, 1, 0);
+		self._base = self.MapObject.Position - (self._T * self.MapObject.Scale.X + self._B * self.MapObject.Scale.Z) * 0.5;
+		self._pathCompressor = PathCompressor();
+		self._segmentGenerator = SegmentGenerator(self.MapObject.Scale.Z * 0.005, self);
+		self._preview = self.CreateLine(Color(0, 0, 0));
+		self._bound = Vector2(self.MapObject.Scale.X, self.MapObject.Scale.Z);
+		self._serializer = Serializer(self._bound);
+	}
 
-  function OnTick() {
-    mouse = Input.GetMouseAim() - self._base;
-    X = Vector3.Dot(mouse, self._T);
-    Y = Vector3.Dot(mouse, self._B);
-    Z = Vector3.Dot(mouse, self._N);
-    
-    if (X < 0 || Y < 0 || X > self.MapObject.Scale.X || Y > self.MapObject.Scale.Z || Z < -0.1 || Z > 0.1) {
-      return;
-    }
-    
-    if (self._hold) {
-      self._segmentGenerator.AddPoint(Vector2(mouse.X, mouse.Y));
-      self._wasHold = true;
-    } elif (self._wasHold) {
-      self._lineID += 1;
-      path = self._pathCompressor.Snip();
+	function Activate(main) {
+		main.ListenOnTick.Add(self);
+		main.ListenOnFrame.Add(self);
+		main.ListenOnChatInput.Add(self);
+		main.ListenOnPlayerJoin.Add(self);
+		main.ListenOnNetworkMessage.Add(self);
+	}
 
-      if (path.GetCurves().Count > 0) {
-        body = self._serializer.EncodePath(path);
-        self.SendPath(null, Network.MyPlayer.ID + "_" + self._lineID, body);
-      }
-      
-      self._preview.PositionCount = 0;
-      self._segmentGenerator.Reset();
-      
-      self._wasHold = false;
-    }
-  }
-  
-  function OnPlayerJoin(player) {
-    if (Network.IsMasterClient) {
-      self.SyncCache(player);
-    }
-  }
-  
-  function OnFrame() {
-    self._hold = Input.GetKeyHold("Human/AttackDefault");
-    if (Input.GetKeyDown("Human/AttackSpecial")) {
-      self.DeleteLine(self._lineID);
-    }
-  }
-  
-  function OnNetworkMessage(sender, message) {
-    data = Json.LoadFromString(message);
-    
-    if (data.Get("op") == "CANVAS_draw") {
-      id = data.Get("id");
-      body = data.Get("body");
-      path = self._serializer.DecodePath(body);
-      line = self.DrawPath(path);
-      self._lines.Set(id, line);
-      
-      if (Network.IsMasterClient) {
-        self._curveCache.Set(id, body);
-      }
-    } elif (data.Get("op") == "CANVAS_delete") {
-      id = data.Get("id");
-      if (self._lines.Contains(id)) {
-        self._lines.Get(id).Destroy();
-        self._lines.Remove(id);
-      }
-      
-      if (Network.IsMasterClient && self._curveCache.Contains(id)) {
-        self._curveCache.Remove(id);
-      }
-    } elif (data.Get("op") == "CANVAS_clear" && sender == Network.MasterClient) {
-      for (line in self._lines.Values) {
-        line.Destroy();
-      }
-      self._lines.Clear();
-    }
-  }
+	function Deactivate(main) {
+		main.ListenOnTick.Remove(self);
+		main.ListenOnFrame.Remove(self);
+		main.ListenOnChatInput.Remove(self);
+		main.ListenOnPlayerJoin.Remove(self);
+		main.ListenOnNetworkMessage.Remove(self);
+	}
 
-  function OnChatInput(message) {
-    if (Network.IsMasterClient && message == "/canvas_clear") {
-      self.ClearCanvas();
-      return false;
-    }
-  }
-  
-  function ClearCanvas() {
-    self._curveCache.Clear();
-    data = Dict();
-    data.Set("op", "CANVAS_clear");
-    Network.SendMessageAll(Json.SaveToString(data));
-  }
+	function OnTick() {
+		mouse = Input.GetMouseAim() - self._base;
+		X = Vector3.Dot(mouse, self._T);
+		Y = Vector3.Dot(mouse, self._B);
+		Z = Vector3.Dot(mouse, self._N);
 
-  coroutine SyncCache(player) {
-    for (key in self._curveCache.Keys) {
-      self.SendPath(player, key, self._curveCache.Get(key));
-      wait 0.25;
-    }
-  }
-  
-  function SendPath(player, id, body) {
-    data = Dict();
-    data.Set("op", "CANVAS_draw");
-    data.Set("id", id);
-    data.Set("body", body);
-    
-    if (player == null) {
-      Network.SendMessageAll(Json.SaveToString(data));
-    } else {
-      Network.SendMessage(player, Json.SaveToString(data));
-    }
-  }
-  
-  function DeleteLine(id) {
-    data = Dict();
-    data.Set("op", "CANVAS_delete");
-    data.Set("id", Network.MyPlayer.ID + "_" + self._lineID);
-    Network.SendMessageAll(Json.SaveToString(data));
-    self._lineID -= 1;
-  }
-  
-  function DrawPath(path) {
-    line = self.CreateLine(Color(0, 0, 0));
-    for (curve in path.GetCurves()) {
-      offset = line.PositionCount;
-      line.PositionCount += 11;
-      for (i in Range(0, 11, 1)) {
-        t = i / 10.0;
-        p = curve.Sample(t);
-        line.SetPosition(offset + i, self.ToWorldSpace(p));
-      }
-    }
-    return line;
-  }
-  
-  function OnAddSegment(point) {
-    self._pathCompressor.OnAddSegment(point);
-    self._preview.PositionCount += 1;
-    self._preview.SetPosition(self._preview.PositionCount - 1, self.ToWorldSpace(point));
-  }
-  
-  function CreateLine(color) {
-    line = LineRenderer.CreateLineRenderer();
-    line.Enabled = true;
-    line.LineColor = color;
-    line.PositionCount = 0;
-    line.StartWidth = 0.05;
-    line.EndWidth = 0.05;
-    return line;
-  }
-  
-  function ToWorldSpace(p) {
-    return self._base + p.X * self._T + p.Y * self._B - 0.1 * self._N;
-  }
+		if (X < 0 || Y < 0 || X > self.MapObject.Scale.X || Y > self.MapObject.Scale.Z || Z < -0.1 || Z > 0.1) {
+			return;
+		}
+
+		if (self._hold) {
+			self._segmentGenerator.AddPoint(Vector2(mouse.X, mouse.Y));
+			self._wasHold = true;
+		} elif (self._wasHold) {
+			self._lineID += 1;
+			path = self._pathCompressor.Snip();
+
+			if (path.GetCurves().Count > 0) {
+				body = self._serializer.EncodePath(path);
+				self.SendPath(null, Network.MyPlayer.ID + "_" + self._lineID, body);
+			}
+
+			self._preview.PositionCount = 0;
+			self._segmentGenerator.Reset();
+
+			self._wasHold = false;
+		}
+	}
+
+	function OnPlayerJoin(player) {
+		if (Network.IsMasterClient) {
+			self.SyncCache(player);
+		}
+	}
+
+	function OnFrame() {
+		self._hold = Input.GetKeyHold("Human/AttackDefault");
+		if (Input.GetKeyDown("Human/AttackSpecial") && Network.MyPlayer.GetCustomProperty("CurrentMode") == "HUB") {
+			self.DeleteLine(self._lineID);
+			self._lineID -= 1;
+		}
+	}
+
+	function OnNetworkMessage(sender, message) {
+		data = Json.LoadFromString(message);
+
+		if (data.Get("op") == "CANVAS_draw") {
+			id = data.Get("id");
+			body = data.Get("body");
+			path = self._serializer.DecodePath(body);
+			line = self.DrawPath(path);
+			self._lines.Set(id, line);
+
+			if (Network.IsMasterClient) {
+				self._curveCache.Set(id, body);
+			}
+		} elif (data.Get("op") == "CANVAS_delete") {
+			id = data.Get("id");
+			if (self._lines.Contains(id)) {
+				self._lines.Get(id).Destroy();
+				self._lines.Remove(id);
+			}
+
+			if (Network.IsMasterClient && self._curveCache.Contains(id)) {
+				self._curveCache.Remove(id);
+			}
+		} elif (data.Get("op") == "CANVAS_clear" && sender == Network.MasterClient) {
+			for (line in self._lines.Values) {
+				line.Destroy();
+			}
+			self._lines.Clear();
+		}
+	}
+
+	function OnChatInput(message) {
+		if (Network.IsMasterClient && message == "/canvas_clear") {
+			self.ClearCanvas();
+			return false;
+		} elif (Network.IsMasterClient && message == "/canvas_size") {
+			Game.Print(String.Length(Json.SaveToString(self._curveCache)));
+			return false;
+		}
+	}
+
+	function ClearCanvas() {
+		self._curveCache.Clear();
+		data = Dict();
+		data.Set("op", "CANVAS_clear");
+		Network.SendMessageAll(Json.SaveToString(data));
+	}
+
+	coroutine SyncCache(player) {
+		for (key in self._curveCache.Keys) {
+			self.SendPath(player, key, self._curveCache.Get(key));
+			wait 0.25;
+		}
+	}
+
+	function SendPath(player, id, body) {
+		data = Dict();
+		data.Set("op", "CANVAS_draw");
+		data.Set("id", id);
+		data.Set("body", body);
+
+		if (player == null) {
+			Network.SendMessageAll(Json.SaveToString(data));
+		} else {
+			Network.SendMessage(player, Json.SaveToString(data));
+		}
+	}
+
+	function DeleteLine(id) {
+		data = Dict();
+		data.Set("op", "CANVAS_delete");
+		data.Set("id", Network.MyPlayer.ID + "_" + self._lineID);
+		Network.SendMessageAll(Json.SaveToString(data));
+	}
+
+	function DrawPath(path) {
+		line = self.CreateLine(Color(0, 0, 0));
+		for (curve in path.GetCurves()) {
+			offset = line.PositionCount;
+			line.PositionCount += 11;
+			for (i in Range(0, 11, 1)) {
+				t = i / 10.0;
+				p = curve.Sample(t);
+				line.SetPosition(offset + i, self.ToWorldSpace(p));
+			}
+		}
+		return line;
+	}
+
+	function OnAddSegment(point) {
+		self._pathCompressor.OnAddSegment(point);
+		self._preview.PositionCount += 1;
+		self._preview.SetPosition(self._preview.PositionCount - 1, self.ToWorldSpace(point));
+	}
+
+	function CreateLine(color) {
+		line = LineRenderer.CreateLineRenderer();
+		line.Enabled = true;
+		line.LineColor = color;
+		line.PositionCount = 0;
+		line.StartWidth = 0.05;
+		line.EndWidth = 0.05;
+		return line;
+	}
+
+	function ToWorldSpace(p) {
+		return self._base + p.X * self._T + p.Y * self._B - 0.1 * self._N;
+	}
 }
 
 class AfkLogic {
@@ -1287,7 +1304,7 @@ class AfkLogic {
 		if (me != null && me.Velocity.Magnitude < 0.3 && !isHubMode && !me.IsCarried) {
 			self._afkTimer -= 1.0;
 			if (self._afkTimer < 0.0) {
-				MainController.SwitchMode("HUB");
+				MainController.SwitchMode("HUB"); 
 			}
 		} else {
 			self._afkTimer = self.AfkLimit;
@@ -1379,6 +1396,15 @@ class MapSubset {
 		for (obj in self._mapObjects) {
 			obj.Position = obj.Position + offset;
 		}
+	}
+
+	function FindMapObjectByName(name) {
+		for (obj in self._mapObjects) {
+			if (obj.Name == name) {
+				return obj;
+			}
+		}
+		return null;
 	}
 
 	function FindMapObjectsByName(name) {
@@ -1528,9 +1554,9 @@ class Leaderboard {
 	function Submit(name, score) {
 		if (self._scores.Contains(name)) {
 			if (self._isAscending) {
-					if (score > self._scores.Get(name)) { return; }
+				if (score > self._scores.Get(name)) { return; }
 			} else {
-					if (score < self._scores.Get(name)) { return; }
+				if (score < self._scores.Get(name)) { return; }
 			}
 		}
 
@@ -2026,6 +2052,7 @@ extension MapLibrary {
 		objects = List();
 		objects.Add(Map.CreateMapObjectRaw("Scene,General/EditorHumanSpawnPoint,5,0,1,1,0,0,Human SpawnPoint,0,0,0,0,0,0,1,1,1,None,Entities,Default,Default|255/255/255/255,Tag|Name:HumanSpawnPoint;"));
 		objects.Add(Map.CreateMapObjectRaw("Scene,Arenas/Arena1,4,0,1,1,1,0,Arena1,0,0,0,0,0,0,1,1,1,Physical,Entities,Default,Default|255/255/255/255,;"));
+		objects.Add(Map.CreateMapObjectRaw("Scene,Geometry/Plane1,6,0,1,1,1,0,Board,0,5.272698,-22.22935,270,0,0,32,1,9,Physical,Entities,Default,Default|255/255/255/255,;"));
 
 		for (obj in objects) {
 			obj.Position = obj.Position + offset;
