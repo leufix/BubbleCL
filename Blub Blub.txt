@@ -246,6 +246,8 @@ class UILogic {
 }
 
 class BombLogic {
+
+	_lastBombRound = 0;
 	function Init(map) {
 		self._map = map;
 		self._playerSpawner = PlayerSpawner(map);
@@ -255,10 +257,22 @@ class BombLogic {
 		main.ListenOnNetworkMessage.Add(self);
 		main.ListenOnCharacterSpawn.Add(self);
 		main.ListenOnTick.Add(self);
-		self._playerSpawner.Spawn();
+		currentBombRound = Network.MasterClient.GetCustomProperty("BOMB_round");
+		if (self._lastBombRound != currentBombRound){
+			self._playerSpawner.Spawn();
+			self._lastBombRound = currentBombRound;
+		}
+		else{
+			me = Network.MyPlayer.Character;
+			if (me != null){
+				me.GetKilled("");
+			}
+		}
 	}
 
 	function Deactivate(main) {
+		currentBombRound = Network.MasterClient.GetCustomProperty("BOMB_round");
+		self._lastBombRound = currentBombRound;
 		main.ListenOnNetworkMessage.Remove(self);
 		main.ListenOnCharacterSpawn.Remove(self);
 		main.ListenOnTick.Remove(self);
@@ -318,8 +332,11 @@ class BombLogic {
 
 class MC_BombLogic {
 	_end = false;
+	_bombRound = 1;
 
-	function Init(map) { }
+	function Init(map) {
+		NetworkUtil.SetCustomProperty("BOMB_round", 1);
+	 }
 
 	function Activate(main) {
 		main.ListenOnSecond.Add(self);
@@ -373,12 +390,14 @@ class MC_BombLogic {
 			NetworkUtil.SetCustomProperty("BOMB_status", "Round ending.");
 
 			self._end = true;
+			self._bombRound += 1;
+			NetworkUtil.SetCustomProperty("BOMB_round", self._bombRound);
 			self.Restart(winner);
 		}
 	}
 
 	coroutine Restart(winner) {
-		wait 5.0;
+		wait 5.23;
 
 		data = Dict();
 		data.Set("op", "BOMB_start");
