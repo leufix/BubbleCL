@@ -2086,7 +2086,7 @@ extension MapUtil {
 			PersistentData.SetProperty(Convert.ToString(i), map.Get(Convert.ToString(i)));
 		}
 
-		PersistentData.SaveToFile("test", false);
+		PersistentData.SaveToFile(fileName, false);
 		PersistentData.Clear();
 	}
 
