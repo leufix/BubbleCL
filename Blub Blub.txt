@@ -1148,8 +1148,9 @@ class CanvasLogic {
 
 	function OnFrame() {
 		self._hold = Input.GetKeyHold("Human/AttackDefault");
-		if (Input.GetKeyDown("Human/AttackSpecial")) {
+		if (Input.GetKeyDown("Human/AttackSpecial") && Network.MyPlayer.GetCustomProperty("CurrentMode") == "HUB") {
 			self.DeleteLine(self._lineID);
+			self._lineID -= 1;
 		}
 	}
 
@@ -1188,6 +1189,9 @@ class CanvasLogic {
 		if (Network.IsMasterClient && message == "/canvas_clear") {
 			self.ClearCanvas();
 			return false;
+		} elif (Network.IsMasterClient && message == "/canvas_size") {
+			Game.Print(String.Length(Json.SaveToString(self._curveCache)));
+			return false;
 		}
 	}
 
@@ -1223,7 +1227,6 @@ class CanvasLogic {
 		data.Set("op", "CANVAS_delete");
 		data.Set("id", Network.MyPlayer.ID + "_" + self._lineID);
 		Network.SendMessageAll(Json.SaveToString(data));
-		self._lineID -= 1;
 	}
 
 	function DrawPath(path) {
