@@ -709,6 +709,7 @@ class AkinaLogic {
 		main.ListenOnSecond.Add(self);
 		main.ListenOnLoadMap.Add(self);
 		main.ListenOnFinishRace.Add(self);
+		main.ListenOnCharacterSpawn.Add(self);
 
 		main.UX.AddBind("Interaction/Function1", "Retry");
 
@@ -727,8 +728,16 @@ class AkinaLogic {
 		main.ListenOnSecond.Remove(self);
 		main.ListenOnLoadMap.Remove(self);
 		main.ListenOnFinishRace.Remove(self);
+		main.ListenOnCharacterSpawn.Remove(self);
 
 		main.UX.RemoveBind("Interaction/Function1", "Retry");
+	}
+	
+	function OnCharacterSpawn(character) {
+		if (character.IsMine && character.Type == "Human") {
+			character.SetWeapon("Blades");
+			character.Team = "Human";
+		}
 	}
 
 	function OnSecond() {
