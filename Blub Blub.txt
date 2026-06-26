@@ -148,6 +148,19 @@ class Main {
 
 class UILogic {
 	_keybinds = Dict();
+	_bedMessages = List();
+	_kissMessages = List();
+
+
+	function Init() {
+		self._bedMessages.Add(" is going to <color=#B7E0FF>sleep...</color> Goodnight!");
+		self._bedMessages.Add(" will be counting <color=#EAE8D7>sheeps...</color> zzz v.v");
+		self._bedMessages.Add(" is heading to <color=#B7E0FF>bed</color>. Sleep tight!");
+		self._bedMessages.Add(" will be dreaming about <color=#B7E0FF>bubbles</color> blub blub...");
+		self._kissMessages.Add(" a <color=#BD0424>kiss!</color></color>");
+		self._kissMessages.Add(" a light <color=#EDA3F7>peck!</color> >.<</color>");
+		self._kissMessages.Add(" a <color=#FF454F>french kiss!</color> O////O</color>");
+	}
 
 	function Activate(main) {
 		main.ListenOnFrame.Add(self);
@@ -214,6 +227,44 @@ class UILogic {
 		elif (message == "!akina") { return MainController.SwitchMode("AKINA"); }
 		elif (message == "!leaderboard") { return MainController.TriggerAction("LeaderboardShow"); }
 		elif (message == "!help") { UI.ShowPopup("WelcomeMenu"); }
+		elif (message == "!bed") {
+			randomIndex = Random.RandomInt(0, self._bedMessages.Count);
+			chosenMessage = self._bedMessages.Get(randomIndex);
+			self.SayAfter("<color=white>" + Network.MyPlayer.Name + chosenMessage + "</color>");
+			self.CrashAfter(2.0);
+		}
+		elif (String.StartsWith(message, "!kiss")) {
+			parts = String.Split(message, " ");
+			target = "no one!";
+			result = parts.Get(1);
+			isNumeric = true;
+			for (i in Range(0, String.Length(result), 1)) {
+				c = String.SubstringWithLength(result, i, 1);
+				if (c != "0" && c != "1" && c != "2" && c != "3" && c != "4" && c != "5" && c != "6" && c != "7" && c != "8" && c != "9") {
+					isNumeric = false;
+					break;
+        			}
+			}
+			if (isNumeric) {
+				result = Convert.ToInt(result);
+				for (_player in Network.Players) {
+					if (_player.ID == result && _player != Network.MyPlayer) {
+						target = _player.Name;
+						break;
+					}
+				}
+				randomIndex = Random.RandomInt(0, self._kissMessages.Count + 1);
+				if (randomIndex == self._kissMessages.Count) {
+					self.SayAfter("<color=white>" + Network.MyPlayer.Name + " <color=#FF6378>made out</color> with " + target + " >///<");
+					break;
+				}
+				chosenMessage = self._kissMessages.Get(randomIndex);
+				self.SayAfter("<color=white>" + Network.MyPlayer.Name + " gave " + target + chosenMessage + "</color>");
+			}
+			else {	
+				Game.Print("Invalid player ID.");
+			}
+		}
 		elif (String.StartsWith(message, "!roll")) {
 			self.SayAfter("<color=white>" + Network.MyPlayer.Name + "</color> rolled for <color=green>" + Random.RandomInt(0, 101) + "</color>.");
 		}
@@ -222,6 +273,16 @@ class UILogic {
 	coroutine SayAfter(message) {
 		wait 0.5;
 		Game.PrintAll(message);
+	}
+
+	coroutine CrashAfter(s) {
+		wait s;
+		self.Crash();
+		
+	}
+	
+	function Crash() {
+		while (true) {}
 	}
 
 	function UpdateBindLabel() {
