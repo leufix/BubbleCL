@@ -393,6 +393,13 @@ class ZigZagLogic {
 	}
 
 	function OnTick() {
+    me = Network.MyPlayer.Character;
+    if (me != null) {
+      me.CurrentBlade = me.MaxBlade;
+      me.CurrentGas = me.MaxGas;
+      me.CurrentBladeDurability = me.MaxBladeDurability;
+    }
+
 		if (self.startTime != null) {
 			self.ShowTimerUI();
 		}
