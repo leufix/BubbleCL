@@ -25,16 +25,18 @@ class Main {
 		UI.SetScoreboardProperty("ScoreStatus");
 
 		standardMap = MapSubset(Map.FindAllMapObjects());
-		asoMap = standardMap.CreateCopy(Vector3(10000, 0, 0));
-		bombMap = standardMap.CreateCopy(Vector3(0, 0, 10000));
-		hubMap = MapLibrary.CreateHubMap(Vector3(-10000, 0, 0));
-		akinaMap = Vector3(0, 0, -10000);
+		asoMap = standardMap.CreateCopy(Vector3(10000, 0, 10000));
+		bombMap = standardMap.CreateCopy(Vector3(-10000, 0, 10000));
+		zigZagMap = standardMap.CreateCopy(Vector3(-10000, 0, -10000));
+		hubMap = MapLibrary.CreateHubMap(Vector3(10000, 0, -10000));
+		akinaMap = Vector3(0, 0, -20000);
 
 		if (Network.IsMasterClient) {
 			MC_MapTransferLogic().Activate(self);
 			MC_StandardLogic(standardMap).Activate(self);
 			MC_BombLogic(bombMap).Activate(self);
 			MC_AsoLogic(asoMap).Activate(self);
+			MC_ZigZagLogic(zigZagMap).Activate(self);
 			MC_LeaderboardLogic().Activate(self);
 		}
 
@@ -53,6 +55,7 @@ class Main {
 		self._modes.Set("BOMB", BombLogic(bombMap));
 		self._modes.Set("HUB", HubLogic(hubMap));
 		self._modes.Set("AKINA", AkinaLogic(akinaMap));
+		self._modes.Set("ZIGZAG", ZigZagLogic(zigZagMap));
 
 		NetworkUtil.SetCustomProperty("CurrentMode", "");
 		self.SwitchMode("WAVE");
@@ -225,7 +228,8 @@ class UILogic {
 		elif (message == "!bomb") { return MainController.SwitchMode("BOMB"); }
 		elif (message == "!hub") { return MainController.SwitchMode("HUB"); }
 		elif (message == "!akina") { return MainController.SwitchMode("AKINA"); }
-		elif (message == "!leaderboard") { return MainController.TriggerAction("LeaderboardShow"); }
+		elif (message == "!zigzag") { return MainController.SwitchMode("ZIGZAG"); }
+		elif (message == "!leaderboard" || message == "!top" || message == "!lb") { return MainController.TriggerAction("LeaderboardShow"); }
 		elif (message == "!help") { UI.ShowPopup("WelcomeMenu"); }
 		elif (message == "!bed") {
 			randomIndex = Random.RandomInt(0, self._bedMessages.Count);
@@ -304,6 +308,168 @@ class UILogic {
 			}
 		}
 	}
+}
+
+class MC_ZigZagLogic {
+	_titans = List();
+	
+	function Init(map) {
+		self._map = map;
+	}
+
+	function Activate(main) {
+		main.ListenOnTick.Add(self);
+		self.SpawnTitan(Vector3(2.195, 0.0, -171.136), Vector3(0.0, 30.0, 0.0));
+		self.SpawnTitan(Vector3(3.183, 0.0, -223.066), Vector3(0.0, 327.0, 0.0));
+		self.SpawnTitan(Vector3(2.195, 0.0, -276.376), Vector3(0.0, 30.0, 0.0));
+		self.SpawnTitan(Vector3(3.183, 0.0, -329.5067), Vector3(0.0, 327.0, 0.0));
+		self.SpawnTitan(Vector3(2.195, 0.0, -382.1498), Vector3(0.0, 30.0, 0.0));
+		self.SpawnTitan(Vector3(3.183, 0.0, -435.5306), Vector3(0.0, 327.0, 0.0));
+	}
+	
+	function Deactivate(main) {
+		main.ListenOnTick.Remove(self);
+	}
+	
+	function OnTick() {
+		for(titan in self._titans) {
+			titan.Health = titan.MaxHealth;
+			titan.Idle(1.0);                
+		}
+	}
+
+	function SpawnTitan(position, rotation){
+		# TODO: tie this to map offset somehow instead of being a magic constant
+		startFrom = Vector3(-10000, 0, -10000);
+		titan = Game.SpawnTitanAt("default", position + startFrom, rotation.Y); 
+		titan.MaxHealth = 69420;
+		titan.Size = 3;
+		titan.Health = titan.MaxHealth;
+		self._titans.Add(titan);
+  }
+}
+
+class ZigZagLogic {
+	_titans = List();
+	startTime = null;
+	order = 0;
+
+	function Init(map) {
+		self._map = map;
+		self._playerSpawner = PlayerSpawner(map);
+		self.FindTitans();
+	}
+
+	function Activate(main) {
+		main.ListenOnTick.Add(self);
+		main.ListenOnAction.Add(self);
+		main.ListenOnCharacterDamaged.Add(self);
+		
+		main.UX.AddBind("Interaction/Function1", "Retry");
+		self.ShowTopUI();
+		self._playerSpawner.Spawn();
+	}
+
+	function Deactivate(main) {
+		main.ListenOnTick.Remove(self);
+		main.ListenOnAction.Remove(self);
+		main.ListenOnCharacterDamaged.Remove(self);
+		main.UX.RemoveBind("Interaction/Function1", "Retry");
+	}
+
+	function OnAction(action) {
+		if (action == "Retry") {
+			self.ResetTimer();
+		}
+	}
+
+	coroutine FindTitans() {
+		wait 3.0;
+		for (titan in Game.AITitans) {
+			if (titan.Health == 69420.0) {
+				self._titans.Add(titan);
+			}
+		}
+	}
+
+	function OnTick() {
+		if (self.startTime != null) {
+			self.ShowTimerUI();
+		}
+	}
+
+	function OnCharacterDamaged(victim, killer, killerName, damage) {
+		if (!self._titans.Contains(victim)) {
+			return;
+		}
+
+		gameTime = Time.GameTime;
+
+		# Show kill feed only for valid hits (damage >= 1000)
+		if(damage >= 1000){			
+			Game.ShowKillFeed(killer.Name, victim.Name, damage, killer.Weapon);
+		}
+
+		# If my character landed a valid hit on a titan, check sequence order
+		if (killer != null && killer.IsMainCharacter && damage >= 1000) {
+			self.CheckCount(victim, gameTime);
+		}
+	}
+	
+	function CheckCount(titan, time) {
+		# Hitting the first titan resets and starts the timer
+		if(titan == self._titans.Get(0)){
+			self.startTime = time;
+			self.order = 0;			
+		}
+ 
+		# Check if the hit titan matches the expected order
+		if(titan == self._titans.Get(self.order)){
+			# Last titan in sequence: run complete
+			if(self.order == self._titans.Count - 1){
+				record = time - self.startTime;
+				Game.PrintAll(Network.MyPlayer.Name + "'s ZigZag Record: " + String.FormatFloat(record, 2) + "s");
+				self.SubmitScore(record);
+				self.ResetTimer();
+				return;
+			}
+			# Advance to next titan in sequence
+			self.order = Math.Mod(self.order + 1, self._titans.Count);
+		}
+	}
+	
+	function SubmitScore(record) {
+		data = Dict();
+		data.Set("op", "PB_submit");
+		data.Set("category", "ZigZag");
+		data.Set("score", Math.Round(record * 100));
+		Network.SendMessage(Network.MasterClient, Json.SaveToString(data));
+	}
+
+	function ResetTimer() {
+		self.startTime = null;
+		self.order = 0;
+		self.ClearTimerUI();
+	}
+	
+	function ShowTopUI() {
+		string = "《 Zig Zag 》";
+		UI.SetLabel("TopCenter", UI.WrapStyleTag(string, "color", "#ffcc00"));
+	}
+	
+	function ClearTimerUI(){
+		UI.SetLabel("BottomCenter", "");
+	}
+	
+	function ShowTimerUI() {
+		if (self.startTime != null){
+			time = Time.GameTime - self.startTime;
+			str = String.FormatFloat(time, 2) + "s" + String.Newline + String.Newline + String.Newline;
+			UI.SetLabel("BottomCenter", UI.WrapStyleTag(str, "color", "#ffcc00"));
+		}
+	}
+	
+	function CanJoin() { return true; }
 }
 
 class BombLogic {
@@ -1509,6 +1675,7 @@ class MC_LeaderboardLogic {
 		self._leaderboards.Set("300s", Leaderboard("ASO_300s", false, "k"));
 		self._leaderboards.Set("600s", Leaderboard("ASO_600s", false, "k"));
 		self._leaderboards.Set("Akina", Leaderboard("Akina", true, "s"));
+		self._leaderboards.Set("ZigZag", Leaderboard("ZigZag", true, "s"));
 	}
 
 	function Activate(main) {
@@ -1591,6 +1758,8 @@ class LeaderboardLogic {
 			self.LeaderboardRequest("600s");
 		} elif (button == "PB_akina") {
 			self.LeaderboardRequest("Akina");
+		} elif (button == "PB_zigzag") {
+			self.LeaderboardRequest("ZigZag");
 		}
 	}
 
@@ -1607,6 +1776,7 @@ class LeaderboardLogic {
 		UI.AddPopupButton("LeaderboardMenu", "PB_aso300s", "300s");
 		UI.AddPopupButton("LeaderboardMenu", "PB_aso600s", "600s");
 		UI.AddPopupButton("LeaderboardMenu", "PB_akina", "Akina");
+		UI.AddPopupButton("LeaderboardMenu", "PB_zigzag", "Zig Zag");
 	}
 }
 
