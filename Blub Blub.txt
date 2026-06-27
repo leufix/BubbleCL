@@ -196,7 +196,7 @@ class UILogic {
 		text += String.Newline;
 		text += "- Commands -" + String.Newline;
 		text += "!hub  |  !wave  |  !aso  |  !bomb  |  !akina" + String.Newline;
-		text += "!leaderboard" + String.Newline;
+		text += "!leaderboard  |  !zigzag" + String.Newline;
 		UI.CreatePopup("WelcomeMenu", "Welcome", 500, 600);
 		UI.AddPopupLabel("WelcomeMenu", text);
 		UI.ShowPopup("WelcomeMenu");
